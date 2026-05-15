@@ -34,7 +34,8 @@ Features:
   - Can output timestamps with configurable decimal precision.
   - Can strip leading musical keys from locator names.
   - Can write a Mixcloud-compatible timestamped tracklist.
-  - Writes tab-separated output with columns:
+  - Can customize or omit the TSV heading row.
+  - Writes tab-separated output with default columns:
       Time    Locator Name
 
 Arguments:
@@ -97,6 +98,27 @@ Arguments:
         python3 extract_locators.py song.als --output=adjusted_locators.tsv
         python3 extract_locators.py song.als -o locators.tsv
 
+  --time-header=LABEL
+      Use LABEL as the first TSV column heading.
+      Default: Time
+
+      Example:
+        python3 extract_locators.py song.als --time-header=Start
+
+  --label-header=LABEL
+      Use LABEL as the second TSV column heading.
+      Default: Locator Name
+
+      Example:
+        python3 extract_locators.py song.als --label-header=Title
+
+  --no-heading-row
+  --no-header
+      Omit the TSV heading row entirely.
+
+      Example:
+        python3 extract_locators.py song.als --no-heading-row
+
   --mixcloud=PATH
   -m PATH
       Also write a Mixcloud-compatible timestamped tracklist.
@@ -110,6 +132,8 @@ Arguments:
 
 Combined examples:
   python3 extract_locators.py song.als --add-offset=27.5 --precision=2 --output=adjusted_locators.tsv
+  python3 extract_locators.py song.als --time-header=TIME --label-header=LABEL --output=ensemble.tsv
+  python3 extract_locators.py song.als --no-heading-row --output=locators.tsv
   python3 extract_locators.py song.als --add-offset=27 --mixcloud=mixcloud.txt
   python3 extract_locators.py song.als --add-offset=27 --strip-keys --output=locators.tsv --mixcloud=mixcloud.txt
 """
@@ -129,6 +153,8 @@ import zlib
 SCRIPT_NAME = "extract_locators.py"
 DEFAULT_BPM = 120.0
 TEMPO_AUTOMATION_POINTEE_ID = "8"
+DEFAULT_TIME_HEADER = "Time"
+DEFAULT_LABEL_HEADER = "Locator Name"
 
 # Ableton locator names often begin with a DJ-friendly musical key token such
 # as "(G#)" or "(Amin)". The expression only strips a key when it appears at
@@ -569,13 +595,21 @@ def ensure_parent_directory(path):
         )
 
 
-def write_tsv(locators, output_tsv, precision=0):
+def write_tsv(
+    locators,
+    output_tsv,
+    precision=0,
+    time_header=DEFAULT_TIME_HEADER,
+    label_header=DEFAULT_LABEL_HEADER,
+    include_heading_row=True,
+):
     """Write locators to a tab-separated file."""
     ensure_parent_directory(output_tsv)
 
     try:
         with output_tsv.open("w", encoding="utf-8") as out:
-            out.write("Time\tLocator Name\n")
+            if include_heading_row:
+                out.write(f"{time_header}\t{label_header}\n")
 
             for seconds, name in locators:
                 timestamp = format_timestamp(seconds, precision=precision)
@@ -630,6 +664,8 @@ def parse_args():
             "Examples:\n"
             "  python3 extract_locators.py song.als\n"
             "  python3 extract_locators.py song.als --output=locators.tsv\n"
+            "  python3 extract_locators.py song.als --time-header=TIME --label-header=LABEL\n"
+            "  python3 extract_locators.py song.als --no-heading-row\n"
             "  python3 extract_locators.py song.als --mixcloud=mixcloud.txt\n"
             "  python3 extract_locators.py song.als --add-offset=27 --strip-keys --output=locators.tsv --mixcloud=mixcloud.txt"
         ),
@@ -668,6 +704,25 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--time-header",
+        metavar="LABEL",
+        help=f"First TSV column heading. Default: {DEFAULT_TIME_HEADER}.",
+    )
+
+    parser.add_argument(
+        "--label-header",
+        metavar="LABEL",
+        help=f"Second TSV column heading. Default: {DEFAULT_LABEL_HEADER}.",
+    )
+
+    parser.add_argument(
+        "--no-heading-row",
+        "--no-header",
+        action="store_true",
+        help="Omit the TSV heading row entirely.",
+    )
+
+    parser.add_argument(
         "-m",
         "--mixcloud",
         metavar="PATH",
@@ -678,6 +733,11 @@ def parse_args():
 
     if args.precision < 0:
         parser.error("--precision must be 0 or greater")
+
+    if args.no_heading_row and (
+        args.time_header is not None or args.label_header is not None
+    ):
+        parser.error("--no-heading-row cannot be combined with --time-header or --label-header")
 
     return args
 
@@ -708,7 +768,22 @@ def run(args):
             "exit_code": 0,
         }
 
-    write_tsv(locators, output_tsv=output_path, precision=args.precision)
+    write_tsv(
+        locators,
+        output_tsv=output_path,
+        precision=args.precision,
+        time_header=(
+            args.time_header
+            if args.time_header is not None
+            else DEFAULT_TIME_HEADER
+        ),
+        label_header=(
+            args.label_header
+            if args.label_header is not None
+            else DEFAULT_LABEL_HEADER
+        ),
+        include_heading_row=not args.no_heading_row,
+    )
 
     rows = [
         ("input", display_path(als_path)),
