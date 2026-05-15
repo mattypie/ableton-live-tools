@@ -15,8 +15,8 @@ License meaning:
     modified material under identical terms.
 
 Version 2026.05 notes:
-  - Fixed: Placeholder for fixes in this release.
-  - New: Placeholder for new behavior in this release.
+  - Support for pre-roll offset (data extending before 1.1.1 or if 1.1.1 has been moved)
+  - Support for tempo changes and ramps: the locator's time will be calculated correctly.
 
 Extract Ableton Live locator markers from an .als file and write them to a TSV.
 
