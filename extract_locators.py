@@ -139,6 +139,7 @@ Combined examples:
 """
 
 import argparse
+import bisect
 import gzip
 import math
 import os
@@ -146,7 +147,7 @@ from pathlib import Path
 import re
 import sys
 import time
-import xml.etree.ElementTree as ET
+import xml.parsers.expat as expat
 import zlib
 
 
@@ -319,19 +320,14 @@ def require_positive_bpm(bpm, context):
         )
 
 
-def float_attribute(element, attribute_name, default, context):
+def float_value(raw_value, default, context):
     """
-    Read a float-valued XML attribute with a helpful error if it is malformed.
+    Read a float-valued XML attribute string with a helpful error if malformed.
 
     Ableton stores beats, tempo values, and locator positions as XML attributes.
     A missing attribute uses the caller's default; a present but non-numeric
     attribute is treated as a corrupt/unexpected session file.
     """
-    if element is None:
-        return default
-
-    raw_value = element.get(attribute_name)
-
     if raw_value is None:
         return default
 
@@ -365,13 +361,15 @@ def seconds_for_segment(b1, bpm1, b2, bpm2):
     return (60.0 / slope) * math.log(bpm2 / bpm1)
 
 
-def read_als_xml_bytes(als_path):
+def parse_als_locator_data(als_path):
     """
-    Read an Ableton .als file as XML bytes.
+    Extract tempo events and locator beats from an Ableton .als file.
 
     Ableton .als files are commonly gzip-compressed XML, but some may be plain
     XML. The magic bytes are more reliable than the file extension, so detection
-    is based on the first two bytes rather than on the name of the file.
+    is based on the first two bytes rather than on the name of the file. XML is
+    parsed as a stream so the script does not need to build a full in-memory
+    tree for large session files.
     """
     try:
         with als_path.open("rb") as als_file:
@@ -380,9 +378,9 @@ def read_als_xml_bytes(als_path):
 
             if first_two_bytes == b"\x1f\x8b":
                 with gzip.GzipFile(fileobj=als_file) as gzipped_file:
-                    return gzipped_file.read()
+                    return parse_als_xml_stream(gzipped_file)
 
-            return als_file.read()
+            return parse_als_xml_stream(als_file)
     except FileNotFoundError as exc:
         raise LocatorToolError(
             "Ableton session file was not found.",
@@ -398,11 +396,132 @@ def read_als_xml_bytes(als_path):
             "Ableton session file looks gzipped, but it could not be decompressed.",
             [("path", display_path(als_path))],
         ) from exc
+    except expat.ExpatError as exc:
+        raise LocatorToolError(
+            "Ableton session file could not be parsed as XML.",
+            [
+                ("path", display_path(als_path)),
+                ("line", exc.lineno),
+                ("column", exc.offset),
+                ("detail", exc),
+            ],
+        ) from exc
     except OSError as exc:
         raise LocatorToolError(
             "Unable to read the Ableton session file.",
             [("path", display_path(als_path)), ("detail", exc)],
         ) from exc
+
+
+def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
+    """
+    Stream-parse Ableton XML and return raw timing data needed by this tool.
+
+    The full Ableton XML can be tens or hundreds of megabytes after gzip
+    decompression. Expat lets us collect only tempo automation and arrangement
+    locators while discarding everything else as it flows past.
+    """
+    path = []
+    tempo_changes = []
+    locator_beats = []
+    state = {
+        "inside_tempo_candidate": False,
+        "tempo_candidate_pointee_id": None,
+        "tempo_candidate_events": None,
+        "inside_locator": False,
+        "locator_name": None,
+        "locator_beat": None,
+    }
+
+    def parent_is(tag_name):
+        return len(path) >= 2 and path[-2] == tag_name
+
+    def parent_chain_is(parent_name, grandparent_name):
+        return (
+            len(path) >= 3
+            and path[-2] == parent_name
+            and path[-3] == grandparent_name
+        )
+
+    def start_element(name, attrs):
+        path.append(name)
+
+        if name == "AutomationEnvelope":
+            state["inside_tempo_candidate"] = True
+            state["tempo_candidate_pointee_id"] = None
+            state["tempo_candidate_events"] = []
+            return
+
+        if state["inside_tempo_candidate"]:
+            if name == "PointeeId" and parent_is("EnvelopeTarget"):
+                state["tempo_candidate_pointee_id"] = attrs.get("Value")
+                return
+
+            if name == "FloatEvent" and parent_chain_is("Events", "Automation"):
+                state["tempo_candidate_events"].append(
+                    (
+                        attrs.get("Time"),
+                        attrs.get("Value"),
+                    )
+                )
+                return
+
+        if name == "Locator":
+            state["inside_locator"] = True
+            state["locator_name"] = None
+            state["locator_beat"] = None
+            return
+
+        if state["inside_locator"] and name == "Name" and state["locator_name"] is None:
+            state["locator_name"] = attrs.get("Value")
+            return
+
+        if state["inside_locator"] and name == "Time" and state["locator_beat"] is None:
+            state["locator_beat"] = float_value(
+                attrs.get("Value"),
+                0.0,
+                "locator beat",
+            )
+
+    def end_element(name):
+        if name == "AutomationEnvelope":
+            if state["tempo_candidate_pointee_id"] == TEMPO_AUTOMATION_POINTEE_ID:
+                for beat_value, bpm_value in state["tempo_candidate_events"]:
+                    beat = float_value(beat_value, 0.0, "tempo event beat")
+                    bpm = float_value(bpm_value, DEFAULT_BPM, "tempo event bpm")
+
+                    require_positive_bpm(bpm, "tempo event bpm")
+
+                    if beat >= 0:
+                        tempo_changes.append((beat, bpm))
+
+            state["inside_tempo_candidate"] = False
+            state["tempo_candidate_pointee_id"] = None
+            state["tempo_candidate_events"] = None
+
+        elif name == "Locator":
+            locator_beats.append(
+                (
+                    state["locator_beat"] if state["locator_beat"] is not None else 0.0,
+                    state["locator_name"] or "Unnamed Locator",
+                )
+            )
+            state["inside_locator"] = False
+            state["locator_name"] = None
+            state["locator_beat"] = None
+
+        path.pop()
+
+    parser = expat.ParserCreate()
+    parser.StartElementHandler = start_element
+    parser.EndElementHandler = end_element
+
+    for chunk in iter(lambda: xml_stream.read(chunk_size), b""):
+        parser.Parse(chunk, False)
+
+    parser.Parse(b"", True)
+
+    return tempo_changes, locator_beats
 
 
 def format_timestamp(total_seconds, precision=0):
@@ -439,30 +558,8 @@ def format_timestamp(total_seconds, precision=0):
     return f"{minutes:02}:{seconds:0{seconds_width}.{precision}f}"
 
 
-def tempo_events_from_xml(root):
-    """
-    Extract tempo automation events from Ableton XML.
-
-    In Ableton's XML, tempo automation is identified by PointeeId=8. Each event
-    stores the beat position in Time and the tempo in Value.
-    """
-    tempo_changes = []
-
-    for envelope in root.findall(".//AutomationEnvelope"):
-        pointee_id = envelope.find(".//EnvelopeTarget/PointeeId")
-
-        if pointee_id is None or pointee_id.get("Value") != TEMPO_AUTOMATION_POINTEE_ID:
-            continue
-
-        for event in envelope.findall(".//Automation/Events/FloatEvent"):
-            beat = float_attribute(event, "Time", 0.0, "tempo event beat")
-            bpm = float_attribute(event, "Value", DEFAULT_BPM, "tempo event bpm")
-
-            require_positive_bpm(bpm, "tempo event bpm")
-
-            if beat >= 0:
-                tempo_changes.append((beat, bpm))
-
+def normalized_tempo_events(tempo_changes):
+    """Return sorted tempo events, falling back to a steady default tempo."""
     if not tempo_changes:
         return [(0.0, DEFAULT_BPM)]
 
@@ -477,7 +574,8 @@ def build_beat_to_seconds_converter(tempo_changes):
     seconds at each tempo event, then uses those cached anchors to convert
     arbitrary locator beats efficiently.
     """
-    seconds_at_beat = {tempo_changes[0][0]: 0.0}
+    beat_positions = [beat for beat, _bpm in tempo_changes]
+    seconds_at_beat = [0.0]
     total_seconds = 0.0
 
     for index in range(1, len(tempo_changes)):
@@ -490,7 +588,7 @@ def build_beat_to_seconds_converter(tempo_changes):
             current_beat,
             current_bpm,
         )
-        seconds_at_beat[current_beat] = total_seconds
+        seconds_at_beat.append(total_seconds)
 
     def beat_to_seconds(beat):
         first_beat, first_bpm = tempo_changes[0]
@@ -499,34 +597,39 @@ def build_beat_to_seconds_converter(tempo_changes):
             require_positive_bpm(first_bpm, "first tempo event bpm")
             return (beat - first_beat) * (60.0 / first_bpm)
 
-        for index in range(1, len(tempo_changes)):
-            segment_start_beat, segment_start_bpm = tempo_changes[index - 1]
-            segment_end_beat, segment_end_bpm = tempo_changes[index]
+        next_event_index = bisect.bisect_left(beat_positions, beat)
 
-            if beat > segment_end_beat:
-                continue
+        if (
+            next_event_index < len(beat_positions)
+            and beat == beat_positions[next_event_index]
+        ):
+            return seconds_at_beat[next_event_index]
 
-            segment_beats = beat - segment_start_beat
+        if next_event_index == len(tempo_changes):
+            last_beat, last_bpm = tempo_changes[-1]
+            require_positive_bpm(last_bpm, "last tempo event bpm")
+            return seconds_at_beat[-1] + (beat - last_beat) * (60.0 / last_bpm)
 
-            if abs(segment_end_bpm - segment_start_bpm) < 1e-9:
-                return seconds_at_beat[segment_start_beat] + segment_beats * (
-                    60.0 / segment_start_bpm
-                )
+        segment_start_index = next_event_index - 1
+        segment_start_beat, segment_start_bpm = tempo_changes[segment_start_index]
+        segment_end_beat, segment_end_bpm = tempo_changes[next_event_index]
+        segment_beats = beat - segment_start_beat
 
-            slope = (segment_end_bpm - segment_start_bpm) / (
-                segment_end_beat - segment_start_beat
-            )
-            bpm_at_beat = segment_start_bpm + slope * segment_beats
-
-            require_positive_bpm(bpm_at_beat, "interpolated tempo bpm")
-
-            return seconds_at_beat[segment_start_beat] + (60.0 / slope) * math.log(
-                bpm_at_beat / segment_start_bpm
+        if abs(segment_end_bpm - segment_start_bpm) < 1e-9:
+            return seconds_at_beat[segment_start_index] + segment_beats * (
+                60.0 / segment_start_bpm
             )
 
-        last_beat, last_bpm = tempo_changes[-1]
-        require_positive_bpm(last_bpm, "last tempo event bpm")
-        return seconds_at_beat[last_beat] + (beat - last_beat) * (60.0 / last_bpm)
+        slope = (segment_end_bpm - segment_start_bpm) / (
+            segment_end_beat - segment_start_beat
+        )
+        bpm_at_beat = segment_start_bpm + slope * segment_beats
+
+        require_positive_bpm(bpm_at_beat, "interpolated tempo bpm")
+
+        return seconds_at_beat[segment_start_index] + (60.0 / slope) * math.log(
+            bpm_at_beat / segment_start_bpm
+        )
 
     return beat_to_seconds
 
@@ -538,36 +641,17 @@ def extract_locators_with_ramps(als_path, add_offset=0.0, strip_keys=False):
     Returned seconds are normalized so the earliest locator is zero, then
     shifted by the user-requested add_offset.
     """
-    xml_data = read_als_xml_bytes(als_path)
-
-    try:
-        root = ET.fromstring(xml_data)
-    except ET.ParseError as exc:
-        raise LocatorToolError(
-            "Ableton session file could not be parsed as XML.",
-            [("path", display_path(als_path)), ("detail", exc)],
-        ) from exc
-
-    tempo_changes = tempo_events_from_xml(root)
+    raw_tempo_changes, locator_beats = parse_als_locator_data(als_path)
+    tempo_changes = normalized_tempo_events(raw_tempo_changes)
     beat_to_seconds = build_beat_to_seconds_converter(tempo_changes)
 
     locators = []
     earliest_seconds = float("inf")
 
-    for locator in root.iter("Locator"):
-        name_element = locator.find(".//Name")
-        time_element = locator.find(".//Time")
-
-        name = (
-            name_element.get("Value")
-            if name_element is not None and name_element.get("Value") is not None
-            else "Unnamed Locator"
-        )
-
+    for beat, name in locator_beats:
         if strip_keys:
             name = strip_key_prefix(name)
 
-        beat = float_attribute(time_element, "Value", 0.0, "locator beat")
         seconds = beat_to_seconds(beat)
 
         earliest_seconds = min(earliest_seconds, seconds)
@@ -608,12 +692,16 @@ def write_tsv(
 
     try:
         with output_tsv.open("w", encoding="utf-8") as out:
+            lines = []
+
             if include_heading_row:
-                out.write(f"{time_header}\t{label_header}\n")
+                lines.append(f"{time_header}\t{label_header}\n")
 
             for seconds, name in locators:
                 timestamp = format_timestamp(seconds, precision=precision)
-                out.write(f"{timestamp}\t{name}\n")
+                lines.append(f"{timestamp}\t{name}\n")
+
+            out.writelines(lines)
     except PermissionError as exc:
         raise LocatorToolError(
             "Permission denied while writing the TSV output file.",
@@ -640,9 +728,13 @@ def write_mixcloud_tracklist(locators, mixcloud_path):
 
     try:
         with mixcloud_path.open("w", encoding="utf-8") as out:
+            lines = []
+
             for seconds, name in locators:
                 timestamp = format_timestamp(seconds, precision=0)
-                out.write(f"{timestamp} {name}\n")
+                lines.append(f"{timestamp} {name}\n")
+
+            out.writelines(lines)
     except PermissionError as exc:
         raise LocatorToolError(
             "Permission denied while writing the Mixcloud output file.",
