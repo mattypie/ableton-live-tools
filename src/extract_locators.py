@@ -2,7 +2,7 @@
 
 """
 extract_locators.py
-Version: 2026.05
+Version: 2026.05.16
 
 Author: Evan Musial <evan@evan.engineer>
 License: Creative Commons Attribution-ShareAlike 4.0 International
@@ -13,6 +13,11 @@ License meaning:
     in any medium or format, even for commercial purposes.
   - If others remix, adapt, or build upon the material, they must license the
     modified material under identical terms.
+
+Version 2026.05.16 notes:
+  - Optimized ALS parsing to run about 26% faster on the RYM_2026-03.als test session.
+  - Reduced peak memory use by about 96% on the RYM_2026-03.als test session.
+  - Moved the script into src/ and moved the long-form guide into Extract Locators.md.
 
 Version 2026.05 notes:
   - Support for pre-roll offset (data extending before 1.1.1 or if 1.1.1 has been moved)

@@ -6,7 +6,7 @@ The script uses only the Python 3 standard library.
 
 ## Current Version
 
-Version: `2026.05`
+Version: `2026.05.16`
 
 Author: Evan Musial <evan@evan.engineer>
 
@@ -15,6 +15,18 @@ License: Creative Commons Attribution-ShareAlike 4.0 International
 This license requires that reusers give credit to the creator. It allows reusers to distribute, remix, adapt, and build upon the material in any medium or format, even for commercial purposes. If others remix, adapt, or build upon the material, they must license the modified material under identical terms.
 
 ## Release Notes
+
+### 2026.05.16
+
+- Moved the Python script from the repository root to `src/extract_locators.py`.
+- Added this guide-meets-release-notes document at `Extract Locators.md`.
+- Simplified `README.md` so it gives a high-level project overview and links here for full Extract Locators documentation.
+- Optimized ALS parsing by streaming only the locator and tempo data needed by the tool instead of building the full Ableton XML tree in memory.
+- Replaced linear tempo segment lookup with `bisect` over precomputed tempo beat positions.
+- Batched TSV and Mixcloud file writes with `writelines`.
+- On the `RYM_2026-03.als` test session, elapsed runtime improved from `1.035s` to `0.769s`, about `26%` less elapsed time.
+- On the `RYM_2026-03.als` test session, peak memory use improved from about `699 MiB` to about `26.8 MiB`, about `96%` less peak memory.
+- Verified the optimized output is byte-identical to the previous implementation for the same command-line options.
 
 ### 2026.05
 
@@ -25,7 +37,6 @@ This license requires that reusers give credit to the creator. It allows reusers
 - Added optional Mixcloud-compatible output.
 - Added optional stripping of leading musical key labels from locator names.
 - Added support for both plain XML `.als` files and gzip-compressed `.als` files.
-- Optimized ALS parsing by streaming only the locator and tempo data needed by the tool instead of building the full Ableton XML tree in memory.
 
 ## What It Does
 
