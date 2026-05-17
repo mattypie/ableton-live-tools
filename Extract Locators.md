@@ -27,6 +27,7 @@ This license requires that reusers give credit to the creator. It allows reusers
 - On the `RYM_2026-03.als` test session, elapsed runtime improved from `1.035s` to `0.769s`, about `26%` less elapsed time.
 - On the `RYM_2026-03.als` test session, peak memory use improved from about `699 MiB` to about `26.8 MiB`, about `96%` less peak memory.
 - Verified the optimized output is byte-identical to the previous implementation for the same command-line options.
+- Tested and validated from Python 3.9 through Python 3.14.5.
 
 ### 2026.05
 

@@ -18,6 +18,7 @@ Version 2026.05.16 notes:
   - Optimized ALS parsing to run about 26% faster on the RYM_2026-03.als test session.
   - Reduced peak memory use by about 96% on the RYM_2026-03.als test session.
   - Moved the script into src/ and moved the long-form guide into Extract Locators.md.
+  - Tested and validated from Python 3.9 through Python 3.14.5.
 
 Version 2026.05 notes:
   - Support for pre-roll offset (data extending before 1.1.1 or if 1.1.1 has been moved)
