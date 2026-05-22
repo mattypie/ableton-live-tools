@@ -33,12 +33,12 @@ This license requires that reusers give credit to the creator. It allows reusers
   - macOS Sequoia 15.7.7 (Intel Core i9-9980HK)
   - Ubuntu 22.04.5 LTS (Intel Xeon E5-1620)
   - Ubuntu 24.04 LTS (Dual Intel Xeon E5-2680 v3)
-- Added [docs/locator-export-roadmap.md](docs/locator-export-roadmap.md) as a checklist for future locator export ideas.
+- Added [locator-export-roadmap.md](locator-export-roadmap.md) as a checklist for future locator export ideas.
 
 ### 2026.05.16
 
 - Moved the Python script from the repository root to `src/extract_locators.py`.
-- Added this guide-meets-release-notes document at `Extract Locators.md`.
+- Added this guide-meets-release-notes document at `docs/Extract Locators.md`.
 - Simplified `README.md` so it gives a high-level project overview and links here for full Extract Locators documentation.
 - Optimized ALS parsing by streaming only the locator and tempo data needed by the tool instead of building the full Ableton XML tree in memory.
 - Replaced linear tempo segment lookup with `bisect` over precomputed tempo beat positions.
