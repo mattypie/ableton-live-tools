@@ -26,6 +26,8 @@ This license requires that reusers give credit to the creator. It allows reusers
 - Added metadata validation exemplars generated from `examples/validation/RYM_2026-03.als`.
 - Updated CLI reports to use the `Locator Extraction Results` heading, list every written file as an `output` row, and show elapsed time with three decimal places.
 - Documented success and error exit codes for scripting and CI usage.
+- Tested and validated from Python 3.9 through Python 3.14.5.
+- Tested with Ableton Live 12.4 (`2026-04-24_d85a94ab5e`) on macOS.
 - Added [docs/locator-export-roadmap.md](docs/locator-export-roadmap.md) as a checklist for future locator export ideas.
 
 ### 2026.05.16
@@ -40,6 +42,7 @@ This license requires that reusers give credit to the creator. It allows reusers
 - On the `RYM_2026-03.als` test session, peak memory use improved from about `699 MiB` to about `26.8 MiB`, about `96%` less peak memory.
 - Verified the optimized output is byte-identical to the previous implementation for the same command-line options.
 - Tested and validated from Python 3.9 through Python 3.14.5.
+- Tested with Ableton Live 12.4 (`2026-04-24_d85a94ab5e`) on macOS.
 
 ### 2026.05
 

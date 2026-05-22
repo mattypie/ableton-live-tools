@@ -23,6 +23,8 @@ Version 2026.05.17 notes:
   - Updated CLI reporting with the "Locator Extraction Results" title,
     repeated "output" rows for written files, three-decimal elapsed time, and
     predictable exit codes for success and error handling.
+  - Tested and validated from Python 3.9 through Python 3.14.5.
+  - Tested with Ableton Live 12.4 (2026-04-24_d85a94ab5e) on macOS.
   - Added a future export-field checklist in docs/locator-export-roadmap.md.
 
 Version 2026.05.16 notes:
@@ -30,6 +32,7 @@ Version 2026.05.16 notes:
   - Reduced peak memory use by about 96% on the RYM_2026-03.als test session.
   - Moved the script into src/ and moved the long-form guide into Extract Locators.md.
   - Tested and validated from Python 3.9 through Python 3.14.5.
+  - Tested with Ableton Live 12.4 (2026-04-24_d85a94ab5e) on macOS.
 
 Version 2026.05 notes:
   - Support for pre-roll offset (data extending before 1.1.1 or if 1.1.1 has been moved)
