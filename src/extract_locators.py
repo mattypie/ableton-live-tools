@@ -25,6 +25,11 @@ Version 2026.05.17 notes:
     predictable exit codes for success and error handling.
   - Tested and validated from Python 3.9 through Python 3.14.5.
   - Tested with Ableton Live 12.4 (2026-04-24_d85a94ab5e) on macOS.
+  - Tested operating-system and CPU combinations:
+      - macOS Tahoe 26.5 (Apple Silicon: M3 Max)
+      - macOS Sequoia 15.7.7 (Intel Core i9-9980HK)
+      - Ubuntu 22.04.5 LTS (Intel Xeon E5-1620)
+      - Ubuntu 24.04 LTS (Dual Intel Xeon E5-2680 v3)
   - Added a future export-field checklist in docs/locator-export-roadmap.md.
 
 Version 2026.05.16 notes:
@@ -33,6 +38,11 @@ Version 2026.05.16 notes:
   - Moved the script into src/ and moved the long-form guide into Extract Locators.md.
   - Tested and validated from Python 3.9 through Python 3.14.5.
   - Tested with Ableton Live 12.4 (2026-04-24_d85a94ab5e) on macOS.
+  - Tested operating-system and CPU combinations:
+      - macOS Tahoe 26.5 (Apple Silicon: M3 Max)
+      - macOS Sequoia 15.7.7 (Intel Core i9-9980HK)
+      - Ubuntu 22.04.5 LTS (Intel Xeon E5-1620)
+      - Ubuntu 24.04 LTS (Dual Intel Xeon E5-2680 v3)
 
 Version 2026.05 notes:
   - Support for pre-roll offset (data extending before 1.1.1 or if 1.1.1 has been moved)
