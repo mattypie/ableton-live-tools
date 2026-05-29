@@ -1,4 +1,4 @@
-Python scripts for dealing with Ableton Live and its session files.
+Python scripts for parsing Ableton Live session files.
 
 ## Tools Collection
 
