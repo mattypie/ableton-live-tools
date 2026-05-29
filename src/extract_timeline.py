@@ -2,7 +2,7 @@
 
 """
 extract_timeline.py
-Version: 2026.05.21
+Version: 2026.05.29
 
 Author: Evan Musial <evan@evan.engineer>
 License: Creative Commons Attribution-ShareAlike 4.0 International
@@ -13,6 +13,19 @@ License meaning:
     in any medium or format, even for commercial purposes.
   - If others remix, adapt, or build upon the material, they must license the
     modified material under identical terms.
+
+Version 2026.05.29 notes:
+  - Added docs/Performance and Output Roadmap.md with profiling baselines,
+    optimization candidates, output-format candidates, and validation notes.
+  - Re-ran the usual validation checks against examples/validation/RYM_2026-03.als
+    on Python 3.14.5.
+  - Confirmed locator timeline rows match Extract Locators metadata at matching
+    precision.
+  - Confirmed full TSV/JSON timeline export and beat-grid timeline export
+    complete successfully.
+  - Confirmed CLI success and missing-file error paths return script-friendly
+    exit codes.
+  - Tested with Ableton Live 12.4.1, released May 28, 2026.
 
 Version 2026.05.21 notes:
   - Initial Extract Timeline release.

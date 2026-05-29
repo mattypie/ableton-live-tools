@@ -6,6 +6,10 @@ Python scripts for dealing with Ableton Live and its session files.
 
 - [Extract Timeline](<docs/Extract Timeline.md>): `src/extract_timeline.py` extracts a precise Ableton Live arrangement timeline from `.als` session files. It writes an interleaved event stream for tempo, tempo ramps, time signatures, detected keys, locators, clip boundaries, song end, and optional generated bar/beat grid rows, with real wall-clock time and sample indexes when a sample rate is available.
 
+## Project Notes
+
+- [Performance and Output Roadmap](<docs/Performance and Output Roadmap.md>): Tracks profiling results, optimization candidates, validation notes, and candidate export formats for future releases.
+
 ## License
 
 Please read [LICENSE](LICENSE) for the terms of use.

@@ -6,7 +6,7 @@ The script uses only the Python 3 standard library.
 
 ## Current Version
 
-Version: `2026.05.17`
+Version: `2026.05.29`
 
 Author: Evan Musial <evan@evan.engineer>
 
@@ -15,6 +15,15 @@ License: Creative Commons Attribution-ShareAlike 4.0 International
 This license requires that reusers give credit to the creator. It allows reusers to distribute, remix, adapt, and build upon the material in any medium or format, even for commercial purposes. If others remix, adapt, or build upon the material, they must license the modified material under identical terms.
 
 ## Release Notes
+
+### 2026.05.29
+
+- Added [Performance and Output Roadmap.md](<Performance and Output Roadmap.md>) with profiling baselines, optimization candidates, output-format candidates, and validation notes.
+- Re-ran the usual validation checks against `examples/validation/RYM_2026-03.als` on Python 3.14.5.
+- Confirmed high-resolution TSV and Mixcloud output still match the validation fixtures exactly.
+- Confirmed metadata TSV and pretty JSON output still match the validation fixtures exactly.
+- Confirmed CLI success and missing-file error paths return script-friendly exit codes.
+- Tested with Ableton Live 12.4.1, released May 28, 2026.
 
 ### 2026.05.17
 

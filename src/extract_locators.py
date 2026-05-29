@@ -2,7 +2,7 @@
 
 """
 extract_locators.py
-Version: 2026.05.17
+Version: 2026.05.29
 
 Author: Evan Musial <evan@evan.engineer>
 License: Creative Commons Attribution-ShareAlike 4.0 International
@@ -13,6 +13,17 @@ License meaning:
     in any medium or format, even for commercial purposes.
   - If others remix, adapt, or build upon the material, they must license the
     modified material under identical terms.
+
+Version 2026.05.29 notes:
+  - Added docs/Performance and Output Roadmap.md with profiling baselines,
+    optimization candidates, output-format candidates, and validation notes.
+  - Re-ran the usual validation checks against examples/validation/RYM_2026-03.als
+    on Python 3.14.5.
+  - Confirmed high-resolution TSV/Mixcloud and metadata TSV/JSON outputs still
+    match the validation fixtures exactly.
+  - Confirmed CLI success and missing-file error paths return script-friendly
+    exit codes.
+  - Tested with Ableton Live 12.4.1, released May 28, 2026.
 
 Version 2026.05.17 notes:
   - Added optional TSV/JSON columns for tempo, song position, time signature,
