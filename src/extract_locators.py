@@ -2,7 +2,7 @@
 
 """
 extract_locators.py
-Version: 2026.05.29
+Version: 2026.05.31
 
 Author: Evan Musial <evan@evan.engineer>
 License: Creative Commons Attribution-ShareAlike 4.0 International
@@ -13,6 +13,17 @@ License meaning:
     in any medium or format, even for commercial purposes.
   - If others remix, adapt, or build upon the material, they must license the
     modified material under identical terms.
+
+Version 2026.05.31 notes:
+  - Added tag-name fast paths to the XML start and end handlers so unrelated
+    Ableton tags skip deeper parser-state checks.
+  - Replaced fixed tuple-slice path checks with direct parent/depth checks.
+  - Added standard-library unittest CLI validation under tests/.
+  - Added scripts/benchmark_validation.py for repeatable validation benchmarks.
+  - On the RYM_2026-03.als metadata TSV + JSON benchmark, median elapsed time
+    improved from 0.844s to 0.691s, about 18.1% faster.
+  - Confirmed fixture-compatible high-resolution TSV/Mixcloud and metadata
+    TSV/JSON output.
 
 Version 2026.05.29 notes:
   - Added docs/Performance and Output Roadmap.md with profiling baselines,
@@ -288,13 +299,32 @@ import zlib
 
 
 SCRIPT_NAME = "extract_locators.py"
-SCRIPT_VERSION = "2026.05.17"
+SCRIPT_VERSION = "2026.05.31"
 REPORT_TITLE = "Locator Extraction Results"
 DEFAULT_BPM = 120.0
 TEMPO_AUTOMATION_POINTEE_ID = "8"
 TIME_SIGNATURE_AUTOMATION_POINTEE_ID = "10"
 DEFAULT_TIME_SIGNATURE_VALUE = 201
 TIME_SIGNATURE_DENOMINATORS = (1, 2, 4, 8, 16)
+
+# The XML start handler is called for every element in the uncompressed ALS
+# document. Most tags are irrelevant to locator extraction, so this small allow
+# list lets the handler skip deeper path checks unless the current tag can
+# actually affect exported timing or labels.
+LOCATOR_XML_INTERESTING_TAGS = frozenset(
+    (
+        "AutomationEnvelope",
+        "PointeeId",
+        "FloatEvent",
+        "EnumEvent",
+        "Manual",
+        "Locator",
+        "Name",
+        "Time",
+    )
+)
+LOCATOR_XML_INTERESTING_END_TAGS = frozenset(("AutomationEnvelope", "Locator"))
+
 DEFAULT_TIME_HEADER = "Time"
 DEFAULT_LABEL_HEADER = "Locator Name"
 DEFAULT_TSV_COLUMNS = ("time", "label")
@@ -737,16 +767,23 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
             and path[-3] == grandparent_name
         )
 
-    def path_ends_with(*tag_names):
+    def at_main_time_signature_manual():
         return (
-            len(path) >= len(tag_names)
-            and tuple(path[-len(tag_names) :]) == tag_names
+            len(path) >= 5
+            and path[-5] == "MainTrack"
+            and path[-4] == "DeviceChain"
+            and path[-3] == "Mixer"
+            and path[-2] == "TimeSignature"
+            and path[-1] == "Manual"
         )
 
     def start_element(name, attrs):
         nonlocal time_signature_manual_value
 
         path.append(name)
+
+        if name not in LOCATOR_XML_INTERESTING_TAGS:
+            return
 
         if name == "AutomationEnvelope":
             state["inside_tempo_candidate"] = True
@@ -778,13 +815,7 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
                 )
                 return
 
-        if path_ends_with(
-            "MainTrack",
-            "DeviceChain",
-            "Mixer",
-            "TimeSignature",
-            "Manual",
-        ):
+        if name == "Manual" and at_main_time_signature_manual():
             time_signature_manual_value = int_value(
                 attrs.get("Value"),
                 DEFAULT_TIME_SIGNATURE_VALUE,
@@ -811,6 +842,10 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
             )
 
     def end_element(name):
+        if name not in LOCATOR_XML_INTERESTING_END_TAGS:
+            path.pop()
+            return
+
         if name == "AutomationEnvelope":
             if state["tempo_candidate_pointee_id"] == TEMPO_AUTOMATION_POINTEE_ID:
                 for beat_value, bpm_value in state["tempo_candidate_float_events"]:

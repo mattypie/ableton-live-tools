@@ -6,7 +6,7 @@ The script uses only the Python 3 standard library.
 
 ## Current Version
 
-Version: `2026.05.29`
+Version: `2026.05.31`
 
 Author: Evan Musial <evan@evan.engineer>
 
@@ -15,6 +15,16 @@ License: Creative Commons Attribution-ShareAlike 4.0 International
 This license requires that reusers give credit to the creator. It allows reusers to distribute, remix, adapt, and build upon the material in any medium or format, even for commercial purposes. If others remix, adapt, or build upon the material, they must license the modified material under identical terms.
 
 ## Release Notes
+
+### 2026.05.31
+
+- Added tag-name fast paths to the XML start and end handlers so unrelated Ableton tags skip deeper parser-state checks.
+- Replaced fixed tuple-slice path checks with direct parent/depth checks in the XML parser.
+- Added the first standard-library `unittest` CLI validation suite under `tests/`.
+- Added `scripts/benchmark_validation.py` for repeatable validation benchmarks.
+- Added a root README testing pointer for `python3 -m unittest discover -s tests`.
+- On the `RYM_2026-03.als` metadata TSV + JSON benchmark, median elapsed time improved from `0.844s` to `0.691s`, about `18.1%` faster.
+- Confirmed high-resolution TSV/Mixcloud and metadata TSV/JSON outputs still match the validation fixtures, allowing only expected JSON metadata normalization for script version and local source path.
 
 ### 2026.05.29
 
