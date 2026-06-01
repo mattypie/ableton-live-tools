@@ -1,8 +1,59 @@
 # Backlog
 
-Ideas for future Ableton Live tools and utilities. This document is intentionally lightweight: each entry should be easy to expand into a release plan, issue, or implementation checklist later.
+Ideas for Ableton Live tools and utilities. This document is intentionally lightweight: each entry should be easy to expand into a release plan, issue, or implementation checklist later.
+
+## Status Style
+
+Each item keeps a plain status line instead of strike-through text:
+
+- `Delivered`: shipped in the listed release.
+- `Proposed`: useful idea, not started yet.
+- `Exploring`: design or research has started, but the feature has not shipped.
+
+## Delivered
+
+### Extract Locators
+
+Status: `Delivered`
+
+Extract Ableton Live arrangement locators from `.als` files and export timestamped tracklists.
+
+Delivered versions:
+
+- `2026.05`: Initial locator extraction with TSV output, configurable headings, Mixcloud output, optional key-prefix stripping, positive/negative offsets, gzip-aware ALS reading, tempo changes, and linear tempo-ramp timing.
+- `2026.05.16`: Streaming parser optimization, `src/` placement, long-form documentation, and validation against known-good examples.
+- `2026.05.17`: Optional locator metadata columns and JSON export.
+- `2026.05.29`: Compatibility, validation, and performance/output roadmap documentation.
+- `2026.05.31`: XML parser fast paths, direct parent/depth path checks, repeatable CLI validation tests, and repeatable benchmark tooling.
+
+### Extract Timeline
+
+Status: `Delivered`
+
+Extract a precise, interleaved Ableton Live arrangement timeline with real wall-clock time, fractional seconds, and optional generated musical grid rows.
+
+Delivered versions:
+
+- `2026.05.21`: Initial timeline extraction with tempo events, tempo ramps, time signatures, detected key/scale entries, locators, clip boundaries, song end, optional bar/beat grids, sample-index calculation, sample-rate/bit-depth metadata, TSV output, JSON output, selectable event types, selectable columns, and `--end-beat`.
+- `2026.05.29`: Compatibility, validation, and performance/output roadmap documentation.
+- `2026.05.31`: XML parser fast paths, target-aware parsing, direct parent/depth path checks, repeatable CLI validation tests, and repeatable benchmark tooling.
+
+### Validation And Benchmark Infrastructure
+
+Status: `Delivered`
+
+Add project-level safety rails so future changes can be checked against known-good Ableton output and measured consistently.
+
+Delivered versions:
+
+- `2026.05.17`: Canonical validation fixtures for `examples/validation/RYM_2026-03.als`.
+- `2026.05.31`: Standard-library `unittest` CLI validation suite and `scripts/benchmark_validation.py` benchmark runner with optional git-ref comparison.
+
+## Proposed
 
 ## Project Health Checker
+
+Status: `Proposed`
 
 Inspect an Ableton Live session and report anything that might make the project hard to open, transfer, archive, render, or collaborate on.
 
@@ -27,6 +78,8 @@ Possible outputs:
 
 ## Semantic ALS Diff
 
+Status: `Proposed`
+
 Compare two `.als` files and report meaningful musical/project changes instead of raw XML differences.
 
 Possible comparisons:
@@ -47,6 +100,8 @@ Possible outputs:
 - JSON diff for Git hooks or release automation.
 
 ## Sample & Plugin/Effects Manifest
+
+Status: `Proposed`
 
 Create a bill of materials for everything the Live Set depends on.
 
@@ -69,6 +124,8 @@ Possible outputs:
 
 ## Project Inventory
 
+Status: `Proposed`
+
 Produce a broad inventory of the contents of an Ableton Live project, covering all MIDI files, sound files, plugins, effects, devices, tracks, groups, and arrangement/session elements that can be reasonably extracted from the `.als` file.
 
 Possible fields:
@@ -90,6 +147,8 @@ Possible outputs:
 - JSON for scripting and future tools.
 
 ## Plugin Manifest
+
+Status: `Proposed`
 
 Extract every plugin/effect used in the session, with views sorted by author and by plugin/effect name.
 
