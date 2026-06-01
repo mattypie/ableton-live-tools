@@ -6,15 +6,15 @@ Ideas for Ableton Live tools and utilities. This document is intentionally light
 
 Each item keeps a plain status line instead of strike-through text:
 
-- `Delivered`: shipped in the listed release.
+- ✅ `Delivered`: shipped in the listed release.
 - `Proposed`: useful idea, not started yet.
 - `Exploring`: design or research has started, but the feature has not shipped.
 
-## Delivered
+## ✅ Delivered
 
 ### Extract Locators
 
-Status: `Delivered`
+Status: ✅ `Delivered`
 
 Extract Ableton Live arrangement locators from `.als` files and export timestamped tracklists.
 
@@ -28,7 +28,7 @@ Delivered versions:
 
 ### Extract Timeline
 
-Status: `Delivered`
+Status: ✅ `Delivered`
 
 Extract a precise, interleaved Ableton Live arrangement timeline with real wall-clock time, fractional seconds, and optional generated musical grid rows.
 
@@ -40,7 +40,7 @@ Delivered versions:
 
 ### Validation And Benchmark Infrastructure
 
-Status: `Delivered`
+Status: ✅ `Delivered`
 
 Add project-level safety rails so future changes can be checked against known-good Ableton output and measured consistently.
 
