@@ -16,12 +16,43 @@ The main finding is that XML parsing dominates runtime. Output writing is compar
 
 ## Highest-Value Optimization Candidates
 
-- Add target-aware parsing to `src/extract_timeline.py`, so clip, media, audio-header, and sample metadata are collected only when the selected event types or columns require them.
-- Add a tag-name fast path in XML start-element handlers, so most unrelated XML elements can return before expensive path matching.
-- Replace repeated tuple path checks with parser state and depth counters for hot XML regions such as tempo automation, time signatures, locators, clips, and sample references.
-- Defer media-path and audio-header work until an output column or metadata block actually needs source file details.
+- [x] Add target-aware parsing to `src/extract_timeline.py`, so clip, media, audio-header, and sample metadata are collected only when the selected event types or columns require them.
+- [x] Add a tag-name fast path in XML start-element handlers, so most unrelated XML elements can return before expensive path matching.
+- [x] Add a tag-name fast path in XML end-element handlers, so most unrelated closing tags skip deeper parser-state checks.
+- [x] Replace fixed tuple-slice path checks with direct parent/depth checks for hot XML paths.
+- [x] Defer media-path and audio-header work until an output column or metadata block actually needs source file details.
 - Avoid JSON serialization for TSV `details` cells unless the selected columns include `details`.
 - Keep streaming XML parsing as the default model, because it preserves the large memory savings already achieved in `2026.05.16`.
+
+## 2026.05.31 Measured Improvements
+
+Benchmarks were run on `examples/validation/RYM_2026-03.als` with Python 3.14.5. Each row uses the median of seven runs and the elapsed time reported by the CLI.
+
+| Tool / Export Shape | Baseline Median | Optimized Median | Change |
+| --- | ---: | ---: | ---: |
+| `extract_locators.py` metadata TSV + JSON | `0.844s` | `0.691s` | `18.1%` faster |
+| `extract_timeline.py` locator-only TSV | `1.568s` | `0.698s` | `55.5%` faster |
+| `extract_timeline.py` beat grid with tempo, time signature, key, locator, and sample index | `1.631s` | `0.773s` | `52.6%` faster |
+| `extract_timeline.py` full TSV + JSON | `1.645s` | `0.783s` | `52.4%` faster |
+
+Implemented changes:
+
+- Added tag-name fast paths to both XML parsers.
+- Added tag-name fast paths to both XML end handlers.
+- Added target-aware timeline parsing so lightweight exports can skip clip/sample structures.
+- Replaced fixed tuple-slice path checks with direct parent/depth checks.
+- Added an end-to-end `unittest` CLI validation suite under `tests/`.
+- Added `scripts/benchmark_validation.py` so validation benchmarks can be repeated consistently and compared against a git ref.
+
+Validation:
+
+- `python3 -m py_compile src/extract_locators.py src/extract_timeline.py tests/test_cli_validation.py`
+- `python3 -m unittest discover -s tests`
+- `python3 scripts/benchmark_validation.py --compare-ref=main`
+- `git diff --check`
+- Full timeline TSV output compared byte-for-byte against `main`.
+- Full timeline JSON output differs from `main` only in the expected script-version metadata field.
+- Core beat-grid timeline TSV output compared byte-for-byte against `main`.
 
 ## Output Format Candidates
 

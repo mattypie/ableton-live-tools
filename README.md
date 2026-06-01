@@ -10,6 +10,11 @@ Python scripts for parsing Ableton Live session files.
 
 - [Performance and Output Roadmap](<docs/Performance and Output Roadmap.md>): Tracks profiling results, optimization candidates, validation notes, and candidate export formats for future releases.
 
+## Testing
+
+- [Tests](tests/README.md): Run `python3 -m unittest discover -s tests` from the repository root to validate the CLI tools against the canonical Ableton Live fixture set.
+- [Validation Benchmark](scripts/benchmark_validation.py): Run `python3 scripts/benchmark_validation.py --compare-ref=main` to measure current CLI performance against another git ref.
+
 ## License
 
 Please read [LICENSE](LICENSE) for the terms of use.

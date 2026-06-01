@@ -2,7 +2,7 @@
 
 """
 extract_timeline.py
-Version: 2026.05.29
+Version: 2026.05.31
 
 Author: Evan Musial <evan@evan.engineer>
 License: Creative Commons Attribution-ShareAlike 4.0 International
@@ -13,6 +13,24 @@ License meaning:
     in any medium or format, even for commercial purposes.
   - If others remix, adapt, or build upon the material, they must license the
     modified material under identical terms.
+
+Version 2026.05.31 notes:
+  - Added tag-name fast paths to the XML start and end handlers so unrelated
+    Ableton tags skip deeper parser-state checks.
+  - Replaced fixed tuple-slice path checks with direct parent/depth checks.
+  - Added target-aware parsing so lightweight exports can skip clip/sample
+    structures when selected event types and columns do not need them.
+  - Added standard-library unittest CLI validation under tests/.
+  - Added scripts/benchmark_validation.py for repeatable validation benchmarks.
+  - On the RYM_2026-03.als locator-only benchmark, median elapsed time improved
+    from 1.568s to 0.698s, about 55.5% faster.
+  - On the RYM_2026-03.als beat-grid core benchmark, median elapsed time
+    improved from 1.631s to 0.773s, about 52.6% faster.
+  - On the RYM_2026-03.als full TSV + JSON benchmark, median elapsed time
+    improved from 1.645s to 0.783s, about 52.4% faster.
+  - Confirmed full timeline TSV and core beat-grid TSV output remain
+    byte-identical to main. Full timeline JSON differs only in expected
+    script-version metadata.
 
 Version 2026.05.29 notes:
   - Added docs/Performance and Output Roadmap.md with profiling baselines,
@@ -219,7 +237,7 @@ import zlib
 
 
 SCRIPT_NAME = "extract_timeline.py"
-SCRIPT_VERSION = "2026.05.21"
+SCRIPT_VERSION = "2026.05.31"
 REPORT_TITLE = "Timeline Extraction Results"
 
 DEFAULT_BPM = 120.0
@@ -228,6 +246,48 @@ DEFAULT_TIME_SIGNATURE_VALUE = 201
 TEMPO_AUTOMATION_POINTEE_ID = "8"
 TIME_SIGNATURE_AUTOMATION_POINTEE_ID = "10"
 TIME_SIGNATURE_DENOMINATORS = (1, 2, 4, 8, 16)
+
+# The XML parser sees every ALS element. These are the only start tags that can
+# affect timeline output, so the handler can return quickly for the many Ableton
+# tags that do not influence tempo, signatures, keys, locators, clips, or media
+# metadata. The full path is still tracked for all tags because interesting
+# children rely on their parent context.
+TIMELINE_XML_INTERESTING_TAGS = frozenset(
+    (
+        "Ableton",
+        "AutomationEnvelope",
+        "PointeeId",
+        "FloatEvent",
+        "EnumEvent",
+        "Manual",
+        "Root",
+        "Name",
+        "InKey",
+        "Locator",
+        "Time",
+        "AudioClip",
+        "MidiClip",
+        "CurrentStart",
+        "CurrentEnd",
+        "IsInKey",
+        "SampleRef",
+        "FileRef",
+        "DefaultSampleRate",
+        "DefaultDuration",
+        "Path",
+        "RelativePath",
+    )
+)
+TIMELINE_XML_INTERESTING_END_TAGS = frozenset(
+    (
+        "AutomationEnvelope",
+        "Locator",
+        "AudioClip",
+        "MidiClip",
+        "SampleRef",
+        "FileRef",
+    )
+)
 
 # Ableton stores scale roots as chromatic semitone indexes. The enharmonic
 # spellings below follow a simple sharp-based display so output is stable across
@@ -461,6 +521,23 @@ class TimelineRawData:
     creator: str
     major_version: str
     minor_version: str
+
+
+@dataclass(frozen=True)
+class TimelineParseOptions:
+    """
+    Control which optional XML regions are collected during timeline parsing.
+
+    Tempo, time-signature, locator, and top-level Ableton metadata are always
+    gathered because they are cheap and central to the timing model. Clip and
+    media regions are much larger, so callers can skip them when the selected
+    export shape does not need that data.
+    """
+
+    collect_session_scale: bool = True
+    collect_clips: bool = True
+    collect_clip_media: bool = True
+    inspect_audio_files: bool = True
 
 
 @dataclass(frozen=True)
@@ -719,7 +796,7 @@ def seconds_for_segment(b1, bpm1, b2, bpm2):
     return (60.0 / slope) * math.log(bpm2 / bpm1)
 
 
-def parse_als_timeline_data(als_path):
+def parse_als_timeline_data(als_path, parse_options=None):
     """
     Extract timeline-relevant raw data from an Ableton .als file.
 
@@ -727,6 +804,9 @@ def parse_als_timeline_data(als_path):
     XML. The magic bytes are more reliable than the file extension, so detection
     is based on the first two bytes rather than on the filename.
     """
+    if parse_options is None:
+        parse_options = TimelineParseOptions()
+
     try:
         with als_path.open("rb") as als_file:
             first_two_bytes = als_file.read(2)
@@ -734,11 +814,20 @@ def parse_als_timeline_data(als_path):
 
             if first_two_bytes == b"\x1f\x8b":
                 with gzip.GzipFile(fileobj=als_file) as gzipped_file:
-                    raw_data = parse_als_xml_stream(gzipped_file)
+                    raw_data = parse_als_xml_stream(
+                        gzipped_file,
+                        parse_options=parse_options,
+                    )
             else:
-                raw_data = parse_als_xml_stream(als_file)
+                raw_data = parse_als_xml_stream(
+                    als_file,
+                    parse_options=parse_options,
+                )
 
-        return enrich_clip_media(raw_data, als_path)
+        if parse_options.inspect_audio_files:
+            return enrich_clip_media(raw_data, als_path)
+
+        return raw_data
     except FileNotFoundError as exc:
         raise TimelineToolError(
             "Ableton session file was not found.",
@@ -771,7 +860,7 @@ def parse_als_timeline_data(als_path):
         ) from exc
 
 
-def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
+def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024, parse_options=None):
     """
     Stream-parse Ableton XML and collect only timeline-relevant data.
 
@@ -779,6 +868,9 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
     lets the script watch for a small number of important paths and discard the
     rest as it flows past.
     """
+    if parse_options is None:
+        parse_options = TimelineParseOptions()
+
     path = []
     tempo_events = []
     time_signature_events = []
@@ -814,23 +906,40 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
             and path[-3] == grandparent_name
         )
 
-    def path_ends_with(*tag_names):
+    def at_main_time_signature_manual():
         return (
-            len(path) >= len(tag_names)
-            and tuple(path[-len(tag_names) :]) == tag_names
+            len(path) >= 5
+            and path[-5] == "MainTrack"
+            and path[-4] == "DeviceChain"
+            and path[-3] == "Mixer"
+            and path[-2] == "TimeSignature"
+            and path[-1] == "Manual"
         )
 
-    def current_clip_parent():
+    def at_session_scale_child(tag_name):
         return (
-            state["current_clip"] is not None
-            and state["current_clip_type"] is not None
-            and parent_is(state["current_clip_type"])
+            len(path) >= 4
+            and path[-4] == "Ableton"
+            and path[-3] == "LiveSet"
+            and path[-2] == "ScaleInformation"
+            and path[-1] == tag_name
+        )
+
+    def at_session_in_key():
+        return (
+            len(path) >= 3
+            and path[-3] == "Ableton"
+            and path[-2] == "LiveSet"
+            and path[-1] == "InKey"
         )
 
     def start_element(name, attrs):
         nonlocal manual_time_signature_value
 
         path.append(name)
+
+        if name not in TIMELINE_XML_INTERESTING_TAGS:
+            return
 
         if name == "Ableton":
             ableton_attrs["creator"] = attrs.get("Creator", "")
@@ -862,13 +971,7 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
                 )
                 return
 
-        if path_ends_with(
-            "MainTrack",
-            "DeviceChain",
-            "Mixer",
-            "TimeSignature",
-            "Manual",
-        ):
+        if name == "Manual" and at_main_time_signature_manual():
             manual_time_signature_value = int_value(
                 attrs.get("Value"),
                 DEFAULT_TIME_SIGNATURE_VALUE,
@@ -876,7 +979,11 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
             )
             return
 
-        if path_ends_with("Ableton", "LiveSet", "ScaleInformation", "Root"):
+        if (
+            parse_options.collect_session_scale
+            and name == "Root"
+            and at_session_scale_child("Root")
+        ):
             session_scale_values["root"] = int_value(
                 attrs.get("Value"),
                 None,
@@ -884,7 +991,11 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
             )
             return
 
-        if path_ends_with("Ableton", "LiveSet", "ScaleInformation", "Name"):
+        if (
+            parse_options.collect_session_scale
+            and name == "Name"
+            and at_session_scale_child("Name")
+        ):
             session_scale_values["name"] = int_value(
                 attrs.get("Value"),
                 None,
@@ -892,7 +1003,11 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
             )
             return
 
-        if path_ends_with("Ableton", "LiveSet", "InKey"):
+        if (
+            parse_options.collect_session_scale
+            and name == "InKey"
+            and at_session_in_key()
+        ):
             session_scale_values["in_key"] = bool_value(attrs.get("Value"))
             return
 
@@ -915,7 +1030,7 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
             )
             return
 
-        if name in ("AudioClip", "MidiClip"):
+        if parse_options.collect_clips and name in ("AudioClip", "MidiClip"):
             clip_type = "audio" if name == "AudioClip" else "midi"
             state["current_clip"] = ClipSource(
                 clip_id=attrs.get("Id", ""),
@@ -927,8 +1042,13 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
 
         current_clip = state["current_clip"]
 
-        if current_clip is not None:
-            if current_clip_parent() and name == "CurrentStart":
+        if parse_options.collect_clips and current_clip is not None:
+            is_direct_clip_child = (
+                state["current_clip_type"] is not None
+                and parent_is(state["current_clip_type"])
+            )
+
+            if is_direct_clip_child and name == "CurrentStart":
                 current_clip.start_beat = float_value(
                     attrs.get("Value"),
                     current_clip.start_beat,
@@ -936,7 +1056,7 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
                 )
                 return
 
-            if current_clip_parent() and name == "CurrentEnd":
+            if is_direct_clip_child and name == "CurrentEnd":
                 current_clip.end_beat = float_value(
                     attrs.get("Value"),
                     current_clip.end_beat,
@@ -944,7 +1064,7 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
                 )
                 return
 
-            if current_clip_parent() and name == "Name":
+            if is_direct_clip_child and name == "Name":
                 current_clip.name = attrs.get("Value") or current_clip.name
                 return
 
@@ -964,12 +1084,15 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
                 )
                 return
 
-            if current_clip_parent() and name == "IsInKey":
+            if is_direct_clip_child and name == "IsInKey":
                 current_clip.scale = ScaleInfo(
                     root=current_clip.scale.root,
                     name=current_clip.scale.name,
                     in_key=bool_value(attrs.get("Value")),
                 )
+                return
+
+            if not parse_options.collect_clip_media:
                 return
 
             if name == "SampleRef":
@@ -1009,6 +1132,10 @@ def parse_als_xml_stream(xml_stream, chunk_size=1024 * 1024):
                 return
 
     def end_element(name):
+        if name not in TIMELINE_XML_INTERESTING_END_TAGS:
+            path.pop()
+            return
+
         if name == "AutomationEnvelope":
             if state["automation_pointee_id"] == TEMPO_AUTOMATION_POINTEE_ID:
                 for beat_value, bpm_value in state["automation_float_events"]:
@@ -1886,6 +2013,64 @@ def build_song_end_event(events, context, end_beat):
     append_event(events, event)
 
 
+def build_parse_options(
+    event_types,
+    columns,
+    grid,
+    end_beat_override,
+    sample_rate_override,
+):
+    """
+    Return the narrowest XML parse options that preserve requested output.
+
+    Clip and media regions are the expensive optional parts of the ALS stream.
+    We still collect them when they directly produce events, when clip scale
+    data may produce key events, when clip timing is needed for the exported
+    end/grid boundary, or when sample references are needed for sample indexes.
+    """
+    selected_event_types = set(event_types)
+    selected_columns = set(columns)
+
+    needs_clip_events = bool(
+        {"clip_start", "clip_end"}.intersection(selected_event_types)
+    )
+    needs_clip_keys = "key" in selected_event_types
+    needs_clip_end_for_timeline_length = (
+        end_beat_override is None
+        and (grid != "none" or "song_end" in selected_event_types)
+    )
+    needs_detected_sample_rate = (
+        sample_rate_override is None
+        and bool({"sample_index", "sample_rate", "bit_depth"}.intersection(selected_columns))
+    )
+    needs_clip_media_columns = bool(
+        {"source_path", "sample_rate", "bit_depth", "details"}.intersection(
+            selected_columns
+        )
+        and (needs_clip_events or needs_clip_keys)
+    )
+
+    collect_clips = (
+        needs_clip_events
+        or needs_clip_keys
+        or needs_clip_end_for_timeline_length
+        or needs_detected_sample_rate
+    )
+    collect_clip_media = collect_clips and (
+        needs_detected_sample_rate or needs_clip_media_columns
+    )
+    inspect_audio_files = collect_clip_media and (
+        "bit_depth" in selected_columns or "details" in selected_columns
+    )
+
+    return TimelineParseOptions(
+        collect_session_scale="key" in selected_event_types,
+        collect_clips=collect_clips,
+        collect_clip_media=collect_clip_media,
+        inspect_audio_files=inspect_audio_files,
+    )
+
+
 def sorted_events(events):
     """Sort by wall time, then beat, then event-kind order, then parse order."""
     return sorted(
@@ -1903,12 +2088,20 @@ def extract_timeline(
     als_path,
     grid="none",
     event_types=DEFAULT_EVENT_TYPES,
+    columns=DEFAULT_COLUMNS,
     end_beat_override=None,
     sample_rate_override=None,
     precision=DEFAULT_PRECISION,
 ):
     """Parse the Ableton file and build exported timeline events plus metadata."""
-    raw_data = parse_als_timeline_data(als_path)
+    parse_options = build_parse_options(
+        event_types,
+        columns,
+        grid,
+        end_beat_override,
+        sample_rate_override,
+    )
+    raw_data = parse_als_timeline_data(als_path, parse_options=parse_options)
     tempo_events = normalized_tempo_events(raw_data.tempo_events)
     time_signature_events = normalized_time_signature_events(
         raw_data.time_signature_events,
@@ -2414,6 +2607,7 @@ def run(args):
         als_path,
         grid=args.grid,
         event_types=event_types,
+        columns=columns,
         end_beat_override=args.end_beat,
         sample_rate_override=args.sample_rate,
         precision=args.precision,
