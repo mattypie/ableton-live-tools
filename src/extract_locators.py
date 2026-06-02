@@ -2,7 +2,7 @@
 
 """
 extract_locators.py
-Version: 2026.05.31
+Version: 2026.06.02
 
 Author: Evan Musial <evan@evan.engineer>
 License: Creative Commons Attribution-ShareAlike 4.0 International
@@ -13,6 +13,21 @@ License meaning:
     in any medium or format, even for commercial purposes.
   - If others remix, adapt, or build upon the material, they must license the
     modified material under identical terms.
+
+Version 2026.06.02 notes:
+  - Added Adobe Audition marker export with --audition / -a.
+  - Added standard comma-separated CSV export with --csv.
+  - Added WebVTT chapter export with --webvtt.
+  - Added CUE sheet export with --cue and optional --cue-audio.
+  - Added Markdown locator report export with --markdown.
+  - Added Standard MIDI locator marker export with --midi.
+  - Writes Audition marker import files with Name, Start, Duration,
+    Time Format, Type, and Description columns.
+  - Uses tab-separated marker rows, matching Audition's practical marker
+    import/export format even when the file is saved with a .csv extension.
+  - Exports Ableton locators as zero-duration Audition Cue markers.
+  - Added validation fixtures for CSV, WebVTT, CUE, Markdown, MIDI, and
+    Audition marker output.
 
 Version 2026.05.31 notes:
   - Added tag-name fast paths to the XML start and end handlers so unrelated
@@ -86,6 +101,12 @@ Features:
   - Can output timestamps with configurable decimal precision.
   - Can strip leading musical keys from locator names.
   - Can write a Mixcloud-compatible timestamped tracklist.
+  - Can write a standard comma-separated CSV file for spreadsheet workflows.
+  - Can write an Adobe Audition marker import file.
+  - Can write WebVTT chapter cues.
+  - Can write CUE sheets for locator-based track indexes.
+  - Can write Markdown locator reports.
+  - Can write Standard MIDI files with locator marker meta events.
   - Can write compact or human-readable JSON.
   - Can customize or omit the TSV heading row.
   - Can add optional locator-position metadata columns.
@@ -253,6 +274,76 @@ Arguments:
         python3 src/extract_locators.py song.als --mixcloud=mixcloud.txt
         python3 src/extract_locators.py song.als -m mixcloud.txt
 
+  --csv=PATH
+      Also write a standard comma-separated CSV file.
+
+      CSV uses the same selected columns, precision, heading labels, and
+      heading-row behavior as TSV. This is a normal comma CSV, unlike the
+      Adobe Audition marker export, which intentionally uses tab-separated
+      marker rows inside a .csv-named file.
+
+      Example:
+        python3 src/extract_locators.py song.als --csv=locators.csv
+
+  --audition=PATH
+  -a PATH
+      Also write an Adobe Audition marker import file.
+
+      Audition marker files are commonly saved with a .csv extension, but the
+      marker table itself is tab-separated text. That CSV filename / TSV
+      contents mismatch is intentional for Audition compatibility.
+
+      Columns:
+        Name    Start    Duration    Time Format    Type    Description
+
+      Ableton locators are exported as zero-duration Cue markers.
+
+      Examples:
+        python3 src/extract_locators.py song.als --audition=audition_markers.csv
+        python3 src/extract_locators.py song.als -a audition_markers.csv
+
+  --webvtt=PATH
+      Also write WebVTT chapter cues.
+
+      Each cue starts at a locator and ends at the next locator. The final cue
+      ends one second after the final locator because Extract Locators does not
+      know the rendered media duration.
+
+      Example:
+        python3 src/extract_locators.py song.als --webvtt=chapters.vtt
+
+  --cue=PATH
+      Also write a CUE sheet using each locator as TRACK INDEX 01.
+
+      Example:
+        python3 src/extract_locators.py song.als --cue=tracks.cue
+
+  --cue-audio=PATH
+      Set the audio filename used by the CUE sheet FILE line.
+      Default: <input session stem>.wav
+
+      Example:
+        python3 src/extract_locators.py song.als --cue=tracks.cue --cue-audio=render.wav
+
+  --markdown=PATH
+      Also write a Markdown locator report.
+
+      Markdown uses the same selected columns as TSV, CSV, and JSON, and always
+      includes a table heading row.
+
+      Example:
+        python3 src/extract_locators.py song.als --columns=all --markdown=locators.md
+
+  --midi=PATH
+      Also write a Standard MIDI file containing locator marker meta events.
+
+      MIDI marker placement uses the locator's absolute Ableton beat position,
+      not the normalized/output timestamp. The --add-offset option is meant for
+      timestamped text formats and does not shift MIDI beat positions.
+
+      Example:
+        python3 src/extract_locators.py song.als --midi=markers.mid
+
   --json=PATH
   -j PATH
       Also write a JSON locator export.
@@ -270,9 +361,15 @@ Combined examples:
   python3 src/extract_locators.py song.als --time-header=TIME --label-header=LABEL --output=ensemble.tsv
   python3 src/extract_locators.py song.als --no-heading-row --output=locators.tsv
   python3 src/extract_locators.py song.als --add-offset=27 --mixcloud=mixcloud.txt
+  python3 src/extract_locators.py song.als --columns=all --csv=locators.csv
+  python3 src/extract_locators.py song.als --add-offset=27 --audition=audition_markers.csv
+  python3 src/extract_locators.py song.als --webvtt=chapters.vtt
+  python3 src/extract_locators.py song.als --cue=tracks.cue --cue-audio=render.wav
+  python3 src/extract_locators.py song.als --columns=all --markdown=locators.md
+  python3 src/extract_locators.py song.als --midi=markers.mid
   python3 src/extract_locators.py song.als --include-tempo --include-song-position --include-time-signature --output=locators.tsv
   python3 src/extract_locators.py song.als --columns=all --json=locators.json
-  python3 src/extract_locators.py song.als --add-offset=27 --strip-keys --output=locators.tsv --mixcloud=mixcloud.txt
+  python3 src/extract_locators.py song.als --add-offset=27 --strip-keys --output=locators.tsv --mixcloud=mixcloud.txt --csv=locators.csv --audition=audition_markers.csv --webvtt=chapters.vtt --cue=tracks.cue --markdown=locators.md --midi=markers.mid
 
 CLI reporting:
   - Reports are headed "Locator Extraction Results".
@@ -285,6 +382,7 @@ CLI reporting:
 
 import argparse
 import bisect
+import csv
 from dataclasses import dataclass
 import gzip
 import json
@@ -299,7 +397,7 @@ import zlib
 
 
 SCRIPT_NAME = "extract_locators.py"
-SCRIPT_VERSION = "2026.05.31"
+SCRIPT_VERSION = "2026.06.02"
 REPORT_TITLE = "Locator Extraction Results"
 DEFAULT_BPM = 120.0
 TEMPO_AUTOMATION_POINTEE_ID = "8"
@@ -342,6 +440,26 @@ OPTIONAL_TSV_COLUMNS = (
 )
 ALL_TSV_COLUMNS = (*DEFAULT_TSV_COLUMNS, *OPTIONAL_TSV_COLUMNS)
 DEFAULT_METADATA_DECIMAL_PLACES = 3
+AUDITION_MARKER_HEADERS = (
+    "Name",
+    "Start",
+    "Duration",
+    "Time Format",
+    "Type",
+    "Description",
+)
+AUDITION_ZERO_DURATION = "0:00.000"
+AUDITION_TIME_FORMAT = "decimal"
+AUDITION_MARKER_TYPE = "Cue"
+WEBVTT_FINAL_CUE_SECONDS = 1.0
+CUE_FRAMES_PER_SECOND = 75
+CUE_DEFAULT_AUDIO_SUFFIX = ".wav"
+MIDI_TICKS_PER_QUARTER_NOTE = 480
+MIDI_FORMAT_SINGLE_TRACK = 0
+MIDI_TRACK_COUNT = 1
+MIDI_MARKER_META_TYPE = 0x06
+MIDI_TRACK_NAME_META_TYPE = 0x03
+MIDI_END_OF_TRACK_META_TYPE = 0x2F
 
 COLUMN_HEADERS = {
     "time": DEFAULT_TIME_HEADER,
@@ -939,6 +1057,130 @@ def format_timestamp(total_seconds, precision=0):
     return f"{minutes:02}:{seconds:0{seconds_width}.{precision}f}"
 
 
+def format_audition_time(total_seconds):
+    """
+    Format seconds for Adobe Audition marker import files.
+
+    Audition's marker table examples use minute-oriented decimal timestamps such
+    as 0:00.000 and 1:30.000. Internally, this formatter works in integer
+    milliseconds so rounding cannot leak values such as 1:59.1000 or 1:60.000
+    into the marker file.
+    """
+    total_milliseconds = max(0, int(round(total_seconds * 1000)))
+    minutes, remaining_milliseconds = divmod(total_milliseconds, 60_000)
+    seconds, milliseconds = divmod(remaining_milliseconds, 1000)
+
+    return f"{minutes}:{seconds:02}.{milliseconds:03}"
+
+
+def format_webvtt_time(total_seconds):
+    """
+    Format seconds as a WebVTT timestamp.
+
+    WebVTT cue timings use hours, minutes, seconds, and milliseconds:
+      HH:MM:SS.mmm
+    """
+    total_milliseconds = max(0, int(round(total_seconds * 1000)))
+    hours, remaining_milliseconds = divmod(total_milliseconds, 3_600_000)
+    minutes, remaining_milliseconds = divmod(remaining_milliseconds, 60_000)
+    seconds, milliseconds = divmod(remaining_milliseconds, 1000)
+
+    return f"{hours:02}:{minutes:02}:{seconds:02}.{milliseconds:03}"
+
+
+def format_cue_time(total_seconds):
+    """
+    Format seconds as a CUE sheet index timestamp.
+
+    CUE sheets use CD frames rather than milliseconds. There are 75 frames per
+    second, so 01:02:03 means one minute, two seconds, and three frames.
+    """
+    total_frames = max(0, int(round(total_seconds * CUE_FRAMES_PER_SECOND)))
+    minutes, remaining_frames = divmod(total_frames, 60 * CUE_FRAMES_PER_SECOND)
+    seconds, frames = divmod(remaining_frames, CUE_FRAMES_PER_SECOND)
+
+    return f"{minutes:02}:{seconds:02}:{frames:02}"
+
+
+def single_line_text(raw_text):
+    """Collapse user-facing labels into one safe line for cue-style formats."""
+    return " ".join(str(raw_text).splitlines())
+
+
+def webvtt_cue_text(raw_text):
+    """
+    Return text that is safe to place in a WebVTT cue body.
+
+    The arrow token separates cue timing from cue text in WebVTT, so replace it
+    if a locator label happens to contain that exact sequence.
+    """
+    return single_line_text(raw_text).replace("-->", "->")
+
+
+def cue_quoted_text(raw_text):
+    """
+    Quote text for simple CUE sheet fields.
+
+    Double quotes inside locator labels are replaced with apostrophes. That is
+    intentionally conservative because CUE parsers vary in how they treat
+    escaped quotes inside TITLE and FILE fields.
+    """
+    safe_text = single_line_text(raw_text).replace('"', "'")
+    return f'"{safe_text}"'
+
+
+def markdown_table_cell(raw_value):
+    """Escape one value for a simple GitHub-flavored Markdown table cell."""
+    text = single_line_text(raw_value)
+    text = text.replace("\\", "\\\\")
+    text = text.replace("|", "\\|")
+    return text
+
+
+def midi_variable_length_quantity(value):
+    """
+    Encode an integer as a MIDI variable-length quantity.
+
+    Standard MIDI delta times and meta-event lengths use this compact base-128
+    representation. Values here are small, but the full encoding keeps the
+    writer correct for long sessions.
+    """
+    value = max(0, int(value))
+    bytes_out = [value & 0x7F]
+    value >>= 7
+
+    while value:
+        bytes_out.insert(0, (value & 0x7F) | 0x80)
+        value >>= 7
+
+    return bytes(bytes_out)
+
+
+def midi_meta_event(delta_ticks, meta_type, payload=b""):
+    """Build one Standard MIDI meta event with a variable-length delta time."""
+    payload = bytes(payload)
+
+    return b"".join(
+        (
+            midi_variable_length_quantity(delta_ticks),
+            b"\xFF",
+            bytes((meta_type,)),
+            midi_variable_length_quantity(len(payload)),
+            payload,
+        )
+    )
+
+
+def midi_text_payload(raw_text):
+    """Encode one MIDI marker/track-name text payload."""
+    return single_line_text(raw_text).encode("utf-8")
+
+
+def midi_tick_for_beat(beat):
+    """Convert an Ableton beat position to a Standard MIDI tick position."""
+    return max(0, int(round(beat * MIDI_TICKS_PER_QUARTER_NOTE)))
+
+
 def normalized_tempo_events(tempo_changes):
     """Return sorted tempo events with a definite active tempo at beat zero."""
     if not tempo_changes:
@@ -1455,6 +1697,55 @@ def write_tsv(
         ) from exc
 
 
+def write_csv_export(
+    rows,
+    output_csv,
+    precision=0,
+    columns=DEFAULT_TSV_COLUMNS,
+    time_header=DEFAULT_TIME_HEADER,
+    label_header=DEFAULT_LABEL_HEADER,
+    include_heading_row=True,
+):
+    """
+    Write locators to a normal comma-separated CSV file.
+
+    This intentionally mirrors TSV column selection and heading behavior. It is
+    separate from Adobe Audition marker export, whose .csv filename convention
+    still contains tab-separated marker rows.
+    """
+    ensure_parent_directory(output_csv)
+
+    try:
+        with output_csv.open("w", encoding="utf-8", newline="") as out:
+            writer = csv.writer(out, lineterminator="\n")
+
+            if include_heading_row:
+                writer.writerow(
+                    [
+                        column_header(column, time_header, label_header)
+                        for column in columns
+                    ]
+                )
+
+            for row in rows:
+                writer.writerow(
+                    [
+                        tsv_value(row, column, precision=precision)
+                        for column in columns
+                    ]
+                )
+    except PermissionError as exc:
+        raise LocatorToolError(
+            "Permission denied while writing the CSV output file.",
+            [("path", display_path(output_csv))],
+        ) from exc
+    except OSError as exc:
+        raise LocatorToolError(
+            "Unable to write the CSV output file.",
+            [("path", display_path(output_csv)), ("detail", exc)],
+        ) from exc
+
+
 def write_mixcloud_tracklist(rows, mixcloud_path):
     """
     Write a Mixcloud-compatible tracklist.
@@ -1485,6 +1776,281 @@ def write_mixcloud_tracklist(rows, mixcloud_path):
         raise LocatorToolError(
             "Unable to write the Mixcloud output file.",
             [("path", display_path(mixcloud_path)), ("detail", exc)],
+        ) from exc
+
+
+def write_audition_markers(rows, audition_path):
+    """
+    Write an Adobe Audition marker import file.
+
+    Audition exposes this as a marker CSV workflow, but the practical import
+    format is a tab-separated marker table. Each Ableton locator maps cleanly to
+    a point marker, so exported rows use zero duration and the Cue marker type.
+    """
+    ensure_parent_directory(audition_path)
+
+    try:
+        with audition_path.open("w", encoding="utf-8", newline="") as out:
+            writer = csv.writer(
+                out,
+                delimiter="\t",
+                lineterminator="\n",
+            )
+            writer.writerow(AUDITION_MARKER_HEADERS)
+
+            for row in rows:
+                writer.writerow(
+                    (
+                        row.name,
+                        format_audition_time(row.output_seconds),
+                        AUDITION_ZERO_DURATION,
+                        AUDITION_TIME_FORMAT,
+                        AUDITION_MARKER_TYPE,
+                        "",
+                    )
+                )
+    except PermissionError as exc:
+        raise LocatorToolError(
+            "Permission denied while writing the Adobe Audition marker file.",
+            [("path", display_path(audition_path))],
+        ) from exc
+    except OSError as exc:
+        raise LocatorToolError(
+            "Unable to write the Adobe Audition marker file.",
+            [("path", display_path(audition_path)), ("detail", exc)],
+        ) from exc
+
+
+def write_webvtt_chapters(rows, webvtt_path):
+    """
+    Write locators as WebVTT chapter cues.
+
+    WebVTT cues require an end time. Locator rows only provide point markers, so
+    every cue ends at the next locator. The final cue receives a small one
+    second duration because this script does not know the rendered media end.
+    """
+    ensure_parent_directory(webvtt_path)
+
+    try:
+        with webvtt_path.open("w", encoding="utf-8") as out:
+            lines = ["WEBVTT\n", "\n"]
+
+            for index, row in enumerate(rows):
+                start_seconds = max(0.0, row.output_seconds)
+
+                next_row_starts_later = (
+                    index + 1 < len(rows)
+                    and rows[index + 1].output_seconds > start_seconds
+                )
+
+                if next_row_starts_later:
+                    end_seconds = rows[index + 1].output_seconds
+                else:
+                    end_seconds = start_seconds + WEBVTT_FINAL_CUE_SECONDS
+
+                cue_text = webvtt_cue_text(row.name) or f"Locator {index + 1}"
+                lines.extend(
+                    [
+                        (
+                            f"{format_webvtt_time(start_seconds)} --> "
+                            f"{format_webvtt_time(end_seconds)}\n"
+                        ),
+                        f"{cue_text}\n",
+                        "\n",
+                    ]
+                )
+
+            out.writelines(lines)
+    except PermissionError as exc:
+        raise LocatorToolError(
+            "Permission denied while writing the WebVTT output file.",
+            [("path", display_path(webvtt_path))],
+        ) from exc
+    except OSError as exc:
+        raise LocatorToolError(
+            "Unable to write the WebVTT output file.",
+            [("path", display_path(webvtt_path)), ("detail", exc)],
+        ) from exc
+
+
+def write_cue_sheet(rows, cue_path, als_path, cue_audio=None):
+    """
+    Write a CUE sheet from locator rows.
+
+    The FILE line points at a rendered audio filename. If the caller does not
+    provide one, use the input ALS stem with a .wav suffix as a practical
+    placeholder that can be edited after rendering.
+    """
+    ensure_parent_directory(cue_path)
+
+    cue_audio_name = cue_audio or (
+        f"{Path(als_path).stem}{CUE_DEFAULT_AUDIO_SUFFIX}"
+    )
+    cue_title = Path(als_path).stem
+
+    try:
+        with cue_path.open("w", encoding="utf-8") as out:
+            lines = [
+                f"TITLE {cue_quoted_text(cue_title)}\n",
+                f"FILE {cue_quoted_text(cue_audio_name)} WAVE\n",
+            ]
+
+            for index, row in enumerate(rows, start=1):
+                track_title = row.name or f"Track {index:02d}"
+                lines.extend(
+                    [
+                        f"  TRACK {index:02d} AUDIO\n",
+                        f"    TITLE {cue_quoted_text(track_title)}\n",
+                        f"    INDEX 01 {format_cue_time(row.output_seconds)}\n",
+                    ]
+                )
+
+            out.writelines(lines)
+    except PermissionError as exc:
+        raise LocatorToolError(
+            "Permission denied while writing the CUE sheet.",
+            [("path", display_path(cue_path))],
+        ) from exc
+    except OSError as exc:
+        raise LocatorToolError(
+            "Unable to write the CUE sheet.",
+            [("path", display_path(cue_path)), ("detail", exc)],
+        ) from exc
+
+
+def write_markdown_report(
+    rows,
+    markdown_path,
+    columns,
+    als_path,
+    precision=0,
+    time_header=DEFAULT_TIME_HEADER,
+    label_header=DEFAULT_LABEL_HEADER,
+):
+    """
+    Write a human-readable Markdown locator report.
+
+    Markdown is meant for release notes, documentation, review comments, and
+    quick sharing. Unlike raw TSV/CSV, it always includes table headings.
+    """
+    ensure_parent_directory(markdown_path)
+
+    headings = [
+        column_header(column, time_header, label_header)
+        for column in columns
+    ]
+    separator = ["---" for _column in columns]
+
+    try:
+        with markdown_path.open("w", encoding="utf-8") as out:
+            lines = [
+                "# Locator Export\n",
+                "\n",
+                f"- Source: `{Path(als_path).name}`\n",
+                f"- Locators: `{len(rows)}`\n",
+                f"- Generated by: `{SCRIPT_NAME}`\n",
+                "\n",
+                (
+                    "| "
+                    + " | ".join(markdown_table_cell(item) for item in headings)
+                    + " |\n"
+                ),
+                "| " + " | ".join(separator) + " |\n",
+            ]
+
+            for row in rows:
+                values = [
+                    tsv_value(row, column, precision=precision)
+                    for column in columns
+                ]
+                lines.append(
+                    "| "
+                    + " | ".join(markdown_table_cell(value) for value in values)
+                    + " |\n"
+                )
+
+            out.writelines(lines)
+    except PermissionError as exc:
+        raise LocatorToolError(
+            "Permission denied while writing the Markdown output file.",
+            [("path", display_path(markdown_path))],
+        ) from exc
+    except OSError as exc:
+        raise LocatorToolError(
+            "Unable to write the Markdown output file.",
+            [("path", display_path(markdown_path)), ("detail", exc)],
+        ) from exc
+
+
+def write_midi_markers(rows, midi_path):
+    """
+    Write locator names as Standard MIDI marker meta events.
+
+    MIDI files are beat/tick-based, so markers use each locator's absolute
+    Ableton beat position. Text timestamp offsets do not apply here.
+    """
+    ensure_parent_directory(midi_path)
+
+    try:
+        track_events = bytearray()
+        track_events.extend(
+            midi_meta_event(
+                0,
+                MIDI_TRACK_NAME_META_TYPE,
+                midi_text_payload("Ableton Live Locators"),
+            )
+        )
+
+        previous_tick = 0
+
+        sorted_rows = sorted(rows, key=lambda item: item.absolute_beats)
+
+        for index, row in enumerate(sorted_rows, start=1):
+            tick = midi_tick_for_beat(row.absolute_beats)
+            delta_ticks = max(0, tick - previous_tick)
+            previous_tick = tick
+            marker_name = row.name or f"Locator {index}"
+            track_events.extend(
+                midi_meta_event(
+                    delta_ticks,
+                    MIDI_MARKER_META_TYPE,
+                    midi_text_payload(marker_name),
+                )
+            )
+
+        track_events.extend(
+            midi_meta_event(0, MIDI_END_OF_TRACK_META_TYPE)
+        )
+
+        header_chunk = b"".join(
+            (
+                b"MThd",
+                (6).to_bytes(4, byteorder="big"),
+                MIDI_FORMAT_SINGLE_TRACK.to_bytes(2, byteorder="big"),
+                MIDI_TRACK_COUNT.to_bytes(2, byteorder="big"),
+                MIDI_TICKS_PER_QUARTER_NOTE.to_bytes(2, byteorder="big"),
+            )
+        )
+        track_chunk = b"".join(
+            (
+                b"MTrk",
+                len(track_events).to_bytes(4, byteorder="big"),
+                bytes(track_events),
+            )
+        )
+
+        with midi_path.open("wb") as out:
+            out.write(header_chunk)
+            out.write(track_chunk)
+    except PermissionError as exc:
+        raise LocatorToolError(
+            "Permission denied while writing the MIDI output file.",
+            [("path", display_path(midi_path))],
+        ) from exc
+    except OSError as exc:
+        raise LocatorToolError(
+            "Unable to write the MIDI output file.",
+            [("path", display_path(midi_path)), ("detail", exc)],
         ) from exc
 
 
@@ -1644,9 +2210,15 @@ def parse_args():
             "  python3 src/extract_locators.py song.als --time-header=TIME --label-header=LABEL\n"
             "  python3 src/extract_locators.py song.als --no-heading-row\n"
             "  python3 src/extract_locators.py song.als --mixcloud=mixcloud.txt\n"
+            "  python3 src/extract_locators.py song.als --csv=locators.csv\n"
+            "  python3 src/extract_locators.py song.als --audition=audition_markers.csv\n"
+            "  python3 src/extract_locators.py song.als --webvtt=chapters.vtt\n"
+            "  python3 src/extract_locators.py song.als --cue=tracks.cue --cue-audio=render.wav\n"
+            "  python3 src/extract_locators.py song.als --columns=all --markdown=locators.md\n"
+            "  python3 src/extract_locators.py song.als --midi=markers.mid\n"
             "  python3 src/extract_locators.py song.als --columns=all --json=locators.json\n"
             "  python3 src/extract_locators.py song.als --json=locators.json --json-format=compact\n"
-            "  python3 src/extract_locators.py song.als --add-offset=27 --strip-keys --output=locators.tsv --mixcloud=mixcloud.txt"
+            "  python3 src/extract_locators.py song.als --add-offset=27 --strip-keys --output=locators.tsv --mixcloud=mixcloud.txt --csv=locators.csv --audition=audition_markers.csv --webvtt=chapters.vtt --cue=tracks.cue --markdown=locators.md --midi=markers.mid"
         ),
     )
 
@@ -1791,6 +2363,52 @@ def parse_args():
     )
 
     parser.add_argument(
+        "--csv",
+        metavar="PATH",
+        help="Also write a normal comma-separated CSV export to PATH.",
+    )
+
+    parser.add_argument(
+        "-a",
+        "--audition",
+        metavar="PATH",
+        help=(
+            "Also write an Adobe Audition marker import file to PATH. "
+            "Use a .csv filename; the contents are tab-separated marker rows."
+        ),
+    )
+
+    parser.add_argument(
+        "--webvtt",
+        metavar="PATH",
+        help="Also write WebVTT chapter cues to PATH.",
+    )
+
+    parser.add_argument(
+        "--cue",
+        metavar="PATH",
+        help="Also write a CUE sheet to PATH.",
+    )
+
+    parser.add_argument(
+        "--cue-audio",
+        metavar="PATH",
+        help="Audio filename to use in the CUE sheet FILE line. Requires --cue.",
+    )
+
+    parser.add_argument(
+        "--markdown",
+        metavar="PATH",
+        help="Also write a Markdown locator report to PATH.",
+    )
+
+    parser.add_argument(
+        "--midi",
+        metavar="PATH",
+        help="Also write a Standard MIDI file with locator marker events to PATH.",
+    )
+
+    parser.add_argument(
         "-j",
         "--json",
         metavar="PATH",
@@ -1815,7 +2433,12 @@ def parse_args():
     if args.no_heading_row and (
         args.time_header is not None or args.label_header is not None
     ):
-        parser.error("--no-heading-row cannot be combined with --time-header or --label-header")
+        parser.error(
+            "--no-heading-row cannot be combined with --time-header or --label-header"
+        )
+
+    if args.cue_audio is not None and args.cue is None:
+        parser.error("--cue-audio requires --cue")
 
     return args
 
@@ -1825,6 +2448,13 @@ def run(args):
     als_path = user_path(args.als_path)
     output_path = user_path(args.output) if args.output else default_output_path(als_path)
     mixcloud_path = user_path(args.mixcloud) if args.mixcloud else None
+    csv_path = user_path(args.csv) if args.csv else None
+    audition_path = user_path(args.audition) if args.audition else None
+    webvtt_path = user_path(args.webvtt) if args.webvtt else None
+    cue_path = user_path(args.cue) if args.cue else None
+    cue_audio = str(Path(args.cue_audio).expanduser()) if args.cue_audio else None
+    markdown_path = user_path(args.markdown) if args.markdown else None
+    midi_path = user_path(args.midi) if args.midi else None
     json_path = user_path(args.json) if args.json else None
     columns = selected_columns_from_args(args)
 
@@ -1849,22 +2479,26 @@ def run(args):
             "exit_code": 0,
         }
 
+    time_header = (
+        args.time_header
+        if args.time_header is not None
+        else DEFAULT_TIME_HEADER
+    )
+    label_header = (
+        args.label_header
+        if args.label_header is not None
+        else DEFAULT_LABEL_HEADER
+    )
+    include_heading_row = not args.no_heading_row
+
     write_tsv(
         locator_rows,
         output_tsv=output_path,
         precision=args.precision,
         columns=columns,
-        time_header=(
-            args.time_header
-            if args.time_header is not None
-            else DEFAULT_TIME_HEADER
-        ),
-        label_header=(
-            args.label_header
-            if args.label_header is not None
-            else DEFAULT_LABEL_HEADER
-        ),
-        include_heading_row=not args.no_heading_row,
+        time_header=time_header,
+        label_header=label_header,
+        include_heading_row=include_heading_row,
     )
 
     rows = [
@@ -1873,9 +2507,54 @@ def run(args):
         ("output", display_path(output_path)),
     ]
 
+    if csv_path:
+        write_csv_export(
+            locator_rows,
+            output_csv=csv_path,
+            precision=args.precision,
+            columns=columns,
+            time_header=time_header,
+            label_header=label_header,
+            include_heading_row=include_heading_row,
+        )
+        rows.append(("output", display_path(csv_path)))
+
     if mixcloud_path:
         write_mixcloud_tracklist(locator_rows, mixcloud_path=mixcloud_path)
         rows.append(("output", display_path(mixcloud_path)))
+
+    if audition_path:
+        write_audition_markers(locator_rows, audition_path=audition_path)
+        rows.append(("output", display_path(audition_path)))
+
+    if webvtt_path:
+        write_webvtt_chapters(locator_rows, webvtt_path=webvtt_path)
+        rows.append(("output", display_path(webvtt_path)))
+
+    if cue_path:
+        write_cue_sheet(
+            locator_rows,
+            cue_path=cue_path,
+            als_path=als_path,
+            cue_audio=cue_audio,
+        )
+        rows.append(("output", display_path(cue_path)))
+
+    if markdown_path:
+        write_markdown_report(
+            locator_rows,
+            markdown_path=markdown_path,
+            columns=columns,
+            als_path=als_path,
+            precision=args.precision,
+            time_header=time_header,
+            label_header=label_header,
+        )
+        rows.append(("output", display_path(markdown_path)))
+
+    if midi_path:
+        write_midi_markers(locator_rows, midi_path=midi_path)
+        rows.append(("output", display_path(midi_path)))
 
     if json_path:
         write_json_export(
