@@ -17,8 +17,12 @@ The first test layer focuses on stable user-visible behavior:
 
 - `extract_locators.py` high-resolution TSV and Mixcloud output.
 - `extract_locators.py` metadata TSV and JSON output.
+- `extract_locators.py` standard CSV, WebVTT chapter, and CUE sheet output.
+- `extract_locators.py` Markdown report and Standard MIDI marker output.
+- `extract_locators.py` Adobe Audition marker output, including its `.csv` filename with tab-separated contents.
 - `extract_timeline.py` locator rows compared against locator metadata.
 - Missing input files returning error exit code `1`.
+- Command-line argument errors returning exit code `2`.
 
 The locator JSON test normalizes `version` and `source_file`, because those
 fields intentionally change across releases and local checkout paths.

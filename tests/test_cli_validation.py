@@ -49,6 +49,11 @@ class CliValidationTests(unittest.TestCase):
         actual = Path(actual_path).read_text(encoding="utf-8")
         self.assertEqual(actual, expected)
 
+    def assert_binary_files_match(self, expected_path, actual_path):
+        expected = Path(expected_path).read_bytes()
+        actual = Path(actual_path).read_bytes()
+        self.assertEqual(actual, expected)
+
     def test_extract_locators_highres_fixtures_match(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir)
@@ -117,6 +122,93 @@ class CliValidationTests(unittest.TestCase):
             actual["source_file"] = "<normalized>"
             self.assertEqual(actual, expected)
 
+    def test_extract_locators_audition_marker_fixture_matches(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            actual_tsv = temp_path / "RYM_2026-03_locators.tsv"
+            actual_audition = temp_path / "RYM_2026-03_audition_markers.csv"
+
+            self.run_cli(
+                LOCATORS_SCRIPT,
+                ALS_PATH,
+                "--add-offset=27",
+                "--output",
+                actual_tsv,
+                "--audition",
+                actual_audition,
+            )
+
+            self.assert_files_match(
+                EXAMPLES_DIR / "RYM_2026-03_audition_markers.csv",
+                actual_audition,
+            )
+
+    def test_extract_locators_interchange_format_fixtures_match(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            actual_tsv = temp_path / "RYM_2026-03_locators.tsv"
+            actual_csv = temp_path / "RYM_2026-03_locators_metadata.csv"
+            actual_webvtt = temp_path / "RYM_2026-03_chapters.vtt"
+            actual_cue = temp_path / "RYM_2026-03_tracks.cue"
+
+            self.run_cli(
+                LOCATORS_SCRIPT,
+                ALS_PATH,
+                "--add-offset=27",
+                "--columns=all",
+                "--output",
+                actual_tsv,
+                "--csv",
+                actual_csv,
+                "--webvtt",
+                actual_webvtt,
+                "--cue",
+                actual_cue,
+                "--cue-audio=RYM_2026-03.wav",
+            )
+
+            self.assert_files_match(
+                EXAMPLES_DIR / "RYM_2026-03_locators_metadata.csv",
+                actual_csv,
+            )
+            self.assert_files_match(
+                EXAMPLES_DIR / "RYM_2026-03_chapters.vtt",
+                actual_webvtt,
+            )
+            self.assert_files_match(
+                EXAMPLES_DIR / "RYM_2026-03_tracks.cue",
+                actual_cue,
+            )
+
+    def test_extract_locators_markdown_and_midi_fixtures_match(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir)
+            actual_tsv = temp_path / "RYM_2026-03_locators.tsv"
+            actual_markdown = temp_path / "RYM_2026-03_locators_metadata.md"
+            actual_midi = temp_path / "RYM_2026-03_markers.mid"
+
+            self.run_cli(
+                LOCATORS_SCRIPT,
+                ALS_PATH,
+                "--add-offset=27",
+                "--columns=all",
+                "--output",
+                actual_tsv,
+                "--markdown",
+                actual_markdown,
+                "--midi",
+                actual_midi,
+            )
+
+            self.assert_files_match(
+                EXAMPLES_DIR / "RYM_2026-03_locators_metadata.md",
+                actual_markdown,
+            )
+            self.assert_binary_files_match(
+                EXAMPLES_DIR / "RYM_2026-03_markers.mid",
+                actual_midi,
+            )
+
     def test_timeline_locator_rows_match_locator_metadata(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             actual_tsv = Path(temp_dir) / "RYM_2026-03.timeline-locators.tsv"
@@ -171,6 +263,17 @@ class CliValidationTests(unittest.TestCase):
         self.assertIn("status     error", locator_result.stderr)
         self.assertEqual(timeline_result.returncode, 1)
         self.assertIn("status     error", timeline_result.stderr)
+
+    def test_cue_audio_without_cue_returns_argument_error(self):
+        result = self.run_cli(
+            LOCATORS_SCRIPT,
+            ALS_PATH,
+            "--cue-audio=RYM_2026-03.wav",
+            check=False,
+        )
+
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("--cue-audio requires --cue", result.stderr)
 
 
 if __name__ == "__main__":

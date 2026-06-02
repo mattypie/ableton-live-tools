@@ -1,12 +1,12 @@
 # Extract Locators
 
-`src/extract_locators.py` extracts Ableton Live arrangement locators from an `.als` session file and writes timestamped tracklists. It is designed for preparing time and label exports for show notes, livestream descriptions, Mixcloud uploads, and other post-production notes.
+`src/extract_locators.py` extracts Ableton Live arrangement locators from an `.als` session file and writes timestamped tracklists. It is designed for preparing time and label exports for show notes, livestream descriptions, Mixcloud uploads, Adobe Audition marker imports, WebVTT chapters, CUE sheets, Markdown reports, MIDI marker files, and other post-production notes.
 
 The script uses only the Python 3 standard library.
 
 ## Current Version
 
-Version: `2026.05.31`
+Version: `2026.06.02`
 
 Author: Evan Musial <evan@evan.engineer>
 
@@ -15,6 +15,23 @@ License: Creative Commons Attribution-ShareAlike 4.0 International
 This license requires that reusers give credit to the creator. It allows reusers to distribute, remix, adapt, and build upon the material in any medium or format, even for commercial purposes. If others remix, adapt, or build upon the material, they must license the modified material under identical terms.
 
 ## Release Notes
+
+### 2026.06.02
+
+- Added Adobe Audition marker export with `--audition` / `-a`.
+- Added standard comma-separated CSV export with `--csv`.
+- Added WebVTT chapter export with `--webvtt`.
+- Added CUE sheet export with `--cue` and optional `--cue-audio`.
+- Added Markdown locator report export with `--markdown`.
+- Added Standard MIDI locator marker export with `--midi`.
+- Exported Ableton locators as zero-duration Audition `Cue` markers.
+- Added fixed Audition marker columns: `Name`, `Start`, `Duration`, `Time Format`, `Type`, and `Description`.
+- Documented Audition's practical CSV/TSV quirk: use a `.csv` filename for import, but the marker-file contents are intentionally tab-separated text.
+- Documented that MIDI marker placement uses absolute Ableton beat positions rather than normalized text timestamps.
+- Added validation fixtures for standard CSV, Audition markers, WebVTT chapters, CUE sheets, Markdown reports, and MIDI marker files generated from the canonical Ableton Live session.
+- Added CLI validation tests that regenerate the new export formats and compare them byte-for-byte against the fixtures.
+- Confirmed the expanded validation suite passes with eight standard-library `unittest` checks.
+- Confirmed benchmark results against `main` show no significant speed deterioration; the expanded all-format locator export ran at a `0.707s` median on the validation fixture.
 
 ### 2026.05.31
 
@@ -121,6 +138,24 @@ python3 src/extract_locators.py song.als --output=locators.tsv
 python3 src/extract_locators.py song.als -o locators.tsv
 ```
 
+## CSV Output
+
+Use `--csv` to also write a normal comma-separated CSV file:
+
+```bash
+python3 src/extract_locators.py song.als --csv=locators.csv
+```
+
+CSV output mirrors TSV column selection, precision, custom heading labels, and `--no-heading-row` behavior:
+
+```bash
+python3 src/extract_locators.py song.als --columns=all --csv=locators_metadata.csv
+python3 src/extract_locators.py song.als --time-header=Start --label-header=Title --csv=locators.csv
+python3 src/extract_locators.py song.als --no-heading-row --csv=locators.csv
+```
+
+This is ordinary comma-separated CSV for spreadsheets and scripting. It is separate from Adobe Audition marker export, which commonly uses a `.csv` filename but intentionally contains tab-separated marker rows.
+
 ## Mixcloud Output
 
 Use `--mixcloud` or `-m` to also write a Mixcloud-compatible timestamped tracklist:
@@ -136,6 +171,113 @@ Mixcloud output uses one timestamp and label per line:
 00:00 First Track
 01:28 Second Track
 ```
+
+## Adobe Audition Marker Output
+
+Use `--audition` or `-a` to also write an Adobe Audition marker import file:
+
+```bash
+python3 src/extract_locators.py song.als --audition=audition_markers.csv
+python3 src/extract_locators.py song.als -a audition_markers.csv
+```
+
+The recommended filename extension is `.csv`, because that is what Audition's marker-import workflow commonly expects. The contents are intentionally tab-separated marker rows, not comma-separated CSV. This CSV filename / TSV contents mismatch is an Audition compatibility quirk, not a typo.
+
+Audition marker output uses these columns:
+
+```text
+Name    Start    Duration    Time Format    Type    Description
+```
+
+Ableton locators are exported as zero-duration `Cue` markers:
+
+```text
+Name    Start       Duration   Time Format   Type   Description
+Intro   0:00.000    0:00.000   decimal       Cue
+Break   1:30.000    0:00.000   decimal       Cue
+```
+
+Audition marker output uses millisecond precision regardless of the TSV `--precision` setting, because Audition marker imports expect decimal marker times.
+
+## WebVTT Chapter Output
+
+Use `--webvtt` to write locator rows as WebVTT chapter cues:
+
+```bash
+python3 src/extract_locators.py song.als --webvtt=chapters.vtt
+```
+
+WebVTT output starts each cue at a locator and ends it at the next locator:
+
+```text
+WEBVTT
+
+00:00:27.000 --> 00:01:40.125
+First Track
+```
+
+The final cue ends one second after the final locator because Extract Locators does not know the rendered media duration. If a hosting platform requires the final cue to run to the exact media end, adjust that final end time after rendering.
+
+## CUE Sheet Output
+
+Use `--cue` to write locator rows as CUE sheet track indexes:
+
+```bash
+python3 src/extract_locators.py song.als --cue=tracks.cue
+```
+
+CUE output uses the standard `MM:SS:FF` index format, where `FF` is a 75-frames-per-second CD frame count:
+
+```text
+TITLE "song"
+FILE "song.wav" WAVE
+  TRACK 01 AUDIO
+    TITLE "First Track"
+    INDEX 01 00:27:00
+```
+
+By default, the CUE sheet `FILE` line uses the input session stem with a `.wav` suffix. Use `--cue-audio` when the rendered audio filename is known:
+
+```bash
+python3 src/extract_locators.py song.als --cue=tracks.cue --cue-audio=render.wav
+```
+
+## Markdown Output
+
+Use `--markdown` to write a human-readable locator report:
+
+```bash
+python3 src/extract_locators.py song.als --columns=all --markdown=locators.md
+```
+
+Markdown output uses the same selected columns as TSV, CSV, and JSON. It always includes a table heading row, because the file is meant to be readable in documentation, GitHub pull requests, release notes, and review comments.
+
+Example:
+
+```markdown
+# Locator Export
+
+- Source: `song.als`
+- Locators: `2`
+- Generated by: `extract_locators.py`
+
+| Time | Locator Name |
+| --- | --- |
+| 00:00 | First Track |
+| 01:28 | Second Track |
+```
+
+## MIDI Marker Output
+
+Use `--midi` to write a Standard MIDI file containing locator marker meta events:
+
+```bash
+python3 src/extract_locators.py song.als --midi=markers.mid
+```
+
+MIDI output stores each locator as a MIDI marker meta event in a single-track Standard MIDI file. Marker placement uses the locator's absolute Ableton beat position converted to MIDI ticks, not the normalized/output text timestamp. That means `--add-offset` shifts text-oriented exports such as TSV, Mixcloud, CSV, WebVTT, CUE, and Markdown, but it does not shift MIDI beat positions.
+
+The `2026.06.02` MIDI export is locator-marker focused. A richer MIDI export that includes the full tempo map, time signatures, and key signatures remains a roadmap item.
 
 ## Timing Options
 
@@ -159,7 +301,7 @@ Mixcloud output always uses whole-second timestamps.
 
 ## Metadata Columns
 
-The default TSV and JSON columns are:
+The default TSV, CSV, Markdown, and JSON columns are:
 
 ```text
 time,label
@@ -172,7 +314,7 @@ python3 src/extract_locators.py song.als --columns=time,label,tempo,time_signatu
 python3 src/extract_locators.py song.als --columns=all --output=locators.tsv
 ```
 
-You can also append columns to the default `time,label` export with individual flags:
+You can also append columns to the default `time,label` TSV, CSV, Markdown, and JSON export with individual flags:
 
 ```bash
 python3 src/extract_locators.py song.als --include-tempo --include-song-position --include-time-signature --output=locators.tsv
@@ -210,7 +352,7 @@ python3 src/extract_locators.py song.als --json=locators.json
 python3 src/extract_locators.py song.als -j locators.json
 ```
 
-JSON uses the same selected columns as TSV. Use `--columns=all` to include every field:
+JSON uses the same selected columns as TSV, standard CSV, and Markdown. Use `--columns=all` to include every field:
 
 ```bash
 python3 src/extract_locators.py song.als --columns=all --json=locators.json
@@ -271,10 +413,10 @@ Sharp and flat symbols are also supported when they appear in the locator name.
 
 ## Combined Examples
 
-Apply a 27-second offset, strip leading key labels, write a TSV without a heading row, and also write a Mixcloud file:
+Apply a 27-second offset, strip leading key labels, write a TSV without a heading row, and also write Mixcloud, CSV, Audition marker, WebVTT, CUE, Markdown, and MIDI files:
 
 ```bash
-python3 src/extract_locators.py song.als --add-offset=27 --strip-keys --no-heading-row --output=locators.tsv --mixcloud=mixcloud.txt
+python3 src/extract_locators.py song.als --add-offset=27 --strip-keys --no-heading-row --output=locators.tsv --mixcloud=mixcloud.txt --csv=locators.csv --audition=audition_markers.csv --webvtt=chapters.vtt --cue=tracks.cue --markdown=locators.md --midi=markers.mid
 ```
 
 Write decimal timestamps and custom TSV column labels:
@@ -289,7 +431,7 @@ The script prints a short status report after it runs. Successful output include
 
 - The input session path.
 - The number of locators processed.
-- One `output` row for each written file, including TSV, Mixcloud, and JSON outputs.
+- One `output` row for each written file, including TSV, CSV, Mixcloud, Audition marker, WebVTT, CUE, Markdown, MIDI, and JSON outputs.
 - The elapsed processing time, shown to three decimal places.
 
 Reports are headed `Locator Extraction Results`. Errors use the same compact reporting format for issues such as missing files, unreadable files, invalid option combinations, malformed XML, or invalid tempo data.

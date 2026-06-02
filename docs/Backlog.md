@@ -25,6 +25,7 @@ Delivered versions:
 - `2026.05.17`: Optional locator metadata columns and JSON export.
 - `2026.05.29`: Compatibility, validation, and performance/output roadmap documentation.
 - `2026.05.31`: XML parser fast paths, direct parent/depth path checks, repeatable CLI validation tests, and repeatable benchmark tooling.
+- `2026.06.02`: Standard CSV export, Adobe Audition marker export with `.csv` filenames containing tab-separated marker rows for Audition import compatibility, WebVTT chapter export, CUE sheet export, Markdown report export, and Standard MIDI locator marker export.
 
 ### Extract Timeline
 

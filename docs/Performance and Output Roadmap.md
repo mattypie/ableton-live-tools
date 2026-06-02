@@ -54,14 +54,44 @@ Validation:
 - Full timeline JSON output differs from `main` only in the expected script-version metadata field.
 - Core beat-grid timeline TSV output compared byte-for-byte against `main`.
 
+## Delivered Output Formats
+
+- Adobe Audition marker import (`.csv`): delivered in `2026.06.02` for `extract_locators.py`. The filename extension follows Audition's import workflow, while the file contents are intentionally tab-separated marker rows.
+- CSV (`.csv`): delivered in `2026.06.02` for `extract_locators.py` as a normal comma-separated mirror of the selected TSV/JSON locator columns.
+- WebVTT (`.vtt`): delivered in `2026.06.02` for `extract_locators.py` as locator-based chapter cues.
+- CUE sheet (`.cue`): delivered in `2026.06.02` for `extract_locators.py` as locator-based track indexes with optional rendered-audio filename selection.
+- Markdown (`.md`): delivered in `2026.06.02` for `extract_locators.py` as a human-readable locator report that mirrors selected export columns.
+- Standard MIDI marker file (`.mid`): delivered in `2026.06.02` for `extract_locators.py` as locator marker meta events at absolute Ableton beat positions.
+
 ## Output Format Candidates
 
-- Standard MIDI File (`.mid`): export tempo map, time signatures, key signatures, and locators as MIDI meta events for DAW interchange.
-- WebVTT (`.vtt`): export locators as chapter cues for video, podcast, and web-player workflows.
-- CSV (`.csv`): mirror TSV exports for spreadsheet tools that expect comma-separated files.
-- Markdown (`.md`): produce human-readable reports for release notes, cue sheets, validation logs, and GitHub pull requests.
-- CUE sheet (`.cue`): export locator-based track indexes for long mixes, archives, and CD-style workflows.
+- Expanded Standard MIDI map (`.mid`): add full tempo map, time signatures, and key signatures as MIDI meta events in addition to locator markers.
 - REAPER marker CSV: export locators and timing markers for moving cue data into REAPER.
+
+## 2026.06.02 Validation Notes
+
+The usual validation flow was run after adding CSV, Adobe Audition marker, WebVTT, CUE sheet, Markdown, and MIDI marker exports:
+
+- `python3 -m py_compile src/extract_locators.py tests/test_cli_validation.py`
+- `python3 -m unittest discover -s tests`
+- `python3 scripts/benchmark_validation.py --compare-ref=main`
+- `git diff --check`
+- Standard CSV, Adobe Audition marker, WebVTT, CUE, Markdown, and MIDI fixtures compared byte-for-byte against generated output.
+- Existing high-resolution TSV/Mixcloud, metadata TSV/JSON, timeline locator cross-check, missing-file error, and argument-error checks passed.
+
+Benchmark comparison against `main` showed no material performance movement:
+
+| Case | Baseline Median | Current Median | Change |
+| --- | ---: | ---: | ---: |
+| Locators metadata TSV + JSON | `0.705s` | `0.702s` | `0.4%` faster |
+| Timeline locator-only TSV | `0.706s` | `0.718s` | `1.7%` slower |
+| Timeline beat-grid core TSV | `0.769s` | `0.795s` | `3.4%` slower |
+| Timeline full TSV + JSON | `0.797s` | `0.823s` | `3.3%` slower |
+
+The expanded all-format locator export, with TSV, JSON, Mixcloud, standard CSV,
+Adobe Audition markers, WebVTT, CUE, Markdown, and MIDI all enabled, had a
+median elapsed time of `0.707s` across seven runs on the validation fixture.
+No benchmark showed a significant speed improvement or deterioration.
 
 ## 2026.05.29 Validation Notes
 
