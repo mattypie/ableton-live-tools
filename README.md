@@ -7,7 +7,9 @@ files, WebVTT chapters, CUE sheets, Markdown reports, MIDI locator markers,
 JSON exports, and fixture-backed validation workflows.
 
 The scripts are standard-library Python and are designed to be easy to run from
-a terminal, CI job, or batch-processing workflow.
+a terminal, CI job, or batch-processing workflow. They are optimized for
+high-performance parsing, low memory use, and low-friction command-line use on
+large Ableton Live sets.
 
 ## Points Of Interest
 
