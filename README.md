@@ -1,4 +1,29 @@
-Python scripts for parsing Ableton Live session files.
+Ableton Live Tools is a small Python toolkit for reading Ableton Live `.als`
+session files and turning useful arrangement data into practical exports for
+DJs, producers, editors, archivists, and automation workflows. It focuses on
+things Ableton users often need outside Live itself: locator tracklists,
+tempo-aware timelines, Mixcloud descriptions, Adobe Audition marker imports,
+WebVTT chapters, CUE sheets, MIDI markers, JSON data, and validation-friendly
+reports.
+
+The scripts are standard-library Python and are designed to be easy to run from
+a terminal, CI job, or batch-processing workflow.
+
+## Points Of Interest
+
+- Extract Ableton Live arrangement locators from `.als` files with accurate
+  timing across tempo changes, tempo ramps, offsets, and moved/pre-roll starts.
+- Export locator data to TSV, CSV, JSON, Mixcloud text, Adobe Audition marker
+  files, WebVTT chapters, CUE sheets, Markdown reports, and Standard MIDI marker
+  files.
+- Generate precise Ableton Live timeline data for tempo events, tempo ramps,
+  time signatures, detected keys, locators, clip boundaries, song end, and
+  optional bar/beat grids.
+- Include metadata such as BPM, bar/beat position, time signature, absolute
+  seconds, normalized seconds, Ableton locator IDs, and sequential track
+  numbers.
+- Validate changes against canonical Ableton Live fixture files and benchmark
+  performance against another git ref.
 
 ## Tools Collection
 
