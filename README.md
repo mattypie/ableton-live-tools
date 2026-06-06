@@ -2,9 +2,9 @@ Ableton Live Tools is a small Python toolkit for reading Ableton Live `.als`
 session files and turning useful arrangement data into practical exports for
 DJs, producers, editors, archivists, and automation workflows. It focuses on
 things Ableton users often need outside Live itself: locator tracklists,
-tempo-aware timelines, Mixcloud descriptions, Adobe Audition marker imports,
-WebVTT chapters, CUE sheets, MIDI markers, JSON data, and validation-friendly
-reports.
+tempo-aware timeline data, Mixcloud-compatible tracklists, Adobe Audition marker
+files, WebVTT chapters, CUE sheets, Markdown reports, MIDI locator markers,
+JSON exports, and fixture-backed validation workflows.
 
 The scripts are standard-library Python and are designed to be easy to run from
 a terminal, CI job, or batch-processing workflow.
